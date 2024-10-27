@@ -100,6 +100,7 @@ class BaseRLAviary(BaseAviary):
         )
         #### Set a limit on the maximum target speed ###############
         if act == ActionType.VEL:
+            ### TODO 这里为何要将速度限制为 max 的 0.03 倍？
             self.SPEED_LIMIT = 0.03 * self.MAX_SPEED_KMH * (1000 / 3600)
 
     ################################################################################

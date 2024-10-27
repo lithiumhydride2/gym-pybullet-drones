@@ -66,7 +66,10 @@ class VelocityAviary(BaseAviary):
         """
         #### Create integrated controllers #########################
         os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'  # 和某个并行运算库相关
-        if drone_model in [DroneModel.CF2X, DroneModel.CF2P]:
+
+        if drone_model in [
+                DroneModel.CF2X, DroneModel.CF2P, DroneModel.VSWARM_QUAD
+        ]:
             self.ctrl = [
                 DSLPIDControl(drone_model=DroneModel.CF2X)  # 来自某个论文的控制方法
                 for i in range(num_drones)
@@ -140,7 +143,7 @@ class VelocityAviary(BaseAviary):
                           dtype=np.float32)
 
     ################################################################################
-    def _computeReynoldCommad(self, neighbors: dict[set], smooth_factor=0.3):
+    def get_command_reynolds(self, neighbors: dict[set], smooth_factor=0.3):
         '''
         Args
             neighbors: 用来表示无人机间邻居/观测关系， neighbors[i] 表示 i-th 无人机的邻居
@@ -157,10 +160,10 @@ class VelocityAviary(BaseAviary):
             for other in neighbors[ego]
         ] for ego in range(self.NUM_DRONES)])
 
-        reynolds_commands = [
+        reynolds_commands = np.array([
             self.reynolds.command(relative_position[i])
             for i in range(self.NUM_DRONES)
-        ]
+        ])
 
         if self.last_reynolds_command is None:
             self.last_reynolds_command = reynolds_commands
@@ -169,7 +172,21 @@ class VelocityAviary(BaseAviary):
             1 - smooth_factor)
         self.last_reynolds_command = reynolds_commands  # 更新历史信息
 
+        assert reynolds_commands.shape == (self.NUM_DRONES, 3)
         return reynolds_commands
+
+    def get_command_migration(
+        self,
+        neighbors: dict[set] = None,
+    ):
+        '''
+        Args:
+            neighbotr: 无人机间的邻接关系
+            waypoints: 从 yaml 文件中读取的所有 waypoints
+        '''
+        drone_states = self._computeObs()  # (num_drones * 20)
+        drone_poses = drone_states[:, 0:3]
+        return self.reynolds.get_migration_command(drone_poses)
 
     ################################################################################
 
@@ -192,7 +209,10 @@ class VelocityAviary(BaseAviary):
     ################################################################################
 
     def _preprocessAction(self, action):
-        """Pre-processes the action passed to `.step()` into motors' RPMs.
+        """
+        使用 PID 控制将 action 转化为 RPM, yaw_action 后续也应该从此处产生 
+
+        Pre-processes the action passed to `.step()` into motors' RPMs.
 
         Uses PID control to target a desired velocity vector.
 

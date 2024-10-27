@@ -3,3 +3,4 @@ separation_gain: 11.0
 cohesion_gain: 1.0
 alignment_gain: 0.0
 migration_gain: 1.0
+acceptance_radius: 3.0

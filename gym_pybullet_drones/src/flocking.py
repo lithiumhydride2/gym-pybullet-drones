@@ -49,18 +49,20 @@ DEFAULT_COLAB = False
 def run(drone=DEFAULT_DRONE,
         gui=DEFAULT_GUI,
         num_drones=4,
-        waypoints_file=None,
         record_video=DEFAULT_RECORD_VIDEO,
         plot=DEFAULT_PLOT,
         user_debug_gui=DEFAULT_USER_DEBUG_GUI,
         obstacles=DEFAULT_OBSTACLES,
         simulation_freq_hz=DEFAULT_SIMULATION_FREQ_HZ,
         control_freq_hz=DEFAULT_CONTROL_FREQ_HZ,
+        flocking_freq_hz=10,
         duration_sec=DEFAULT_DURATION_SEC,
         output_folder=DEFAULT_OUTPUT_FOLDER,
+        default_flight_hright=2.0,
         colab=DEFAULT_COLAB):
     #### Initialize the simulation #############################
-    INIT_XYZS = np.array([[.0, .0, x] for x in range(num_drones)])  # 横一字排列
+    INIT_XYZS = np.array([[x, .0, default_flight_hright]
+                          for x in range(num_drones)])  # 横一字排列
     INIT_RPYS = np.zeros((num_drones, 3))  # 偏航角初始化为 0
     PHY = Physics.PYB
 
@@ -86,21 +88,39 @@ def run(drone=DEFAULT_DRONE,
     #### Compute number of control steps in the simlation ######
     PERIOD = duration_sec
     NUM_WP = control_freq_hz * PERIOD
-    wp_counters = np.array([0 for i in range(4)])
 
     #### Initialize the logger #################################
     logger = Logger(logging_freq_hz=control_freq_hz,
-                    num_drones=4,
+                    num_drones=num_drones,
                     output_folder=output_folder,
                     colab=colab)
 
-    #### 读取 way_points
-    with open(waypoints_file) as f:
-        waypoints = yaml.load(f, yaml.FullLoader)  # list 类型
+    #### 更新 flocking 控制指令 ##################################
+
+    def flocking_update(step, action, neighbors: dict[set] = None):
+        # 例如 40hz / 10hz , 则每4step, flocking 更新一次
+        if step % (env.CTRL_FREQ / flocking_freq_hz) != 0:
+            return action
+        # 全链接的 neighbor
+        neighbors = dict()
+        for i in range(num_drones):
+            neighbors[i] = set(
+                list(range(0, i)) + list(range(i + 1, num_drones)))
+
+        flocking_command = env.get_command_reynolds(
+            neighbors) + env.get_command_migration()
+        # 将 command 转化为 action space 内， X Y Z fract of MAX_SPEED_KMH
+        command_norm = np.linalg.norm(flocking_command, axis=1, keepdims=True)
+        flocking_command = flocking_command / command_norm
+        flocking_command = np.hstack(
+            (flocking_command, command_norm / (env.MAX_SPEED_KMH / 3.6)))
+        return flocking_command
 
     #### Run the simulation ####################################
-    action = np.zeros((4, 4))
+    action = np.zeros((num_drones, 4))  # 在 flocking_freq 时刻更新 action 即可
     START = time.time()
+
+    ##### main_loop ##########################################
     for i in range(0, int(duration_sec * env.CTRL_FREQ)):
 
         ############################################################
@@ -109,23 +129,16 @@ def run(drone=DEFAULT_DRONE,
         #### Step the simulation ###################################
         obs, reward, terminated, truncated, info = env.step(action)
 
-        #### Compute control for the current way point #############
-        for j in range(4):
-            action[j, :] = TARGET_VEL[j, wp_counters[j], :]
-
-        #### Go to the next way point and loop #####################
-        for j in range(4):
-            wp_counters[j] = wp_counters[j] + 1 if wp_counters[j] < (NUM_WP -
-                                                                     1) else 0
+        #### Compute the current flocking commands#############
+        action = flocking_update(i, action)
 
         #### Log the simulation ####################################
-        for j in range(4):
+        for j in range(num_drones):
             logger.log(drone=j,
                        timestamp=i / env.CTRL_FREQ,
                        state=obs[j],
-                       control=np.hstack(
-                           [TARGET_VEL[j, wp_counters[j], 0:3],
-                            np.zeros(9)]))
+                       control=np.hstack([action[j, :3],
+                                          np.zeros(9)]))
 
         #### Printout ##############################################
         env.render()
@@ -197,6 +210,11 @@ if __name__ == "__main__":
                         type=int,
                         help='Control frequency in Hz (default: 48)',
                         metavar='')
+    parser.add_argument('--flocking_freq_hz',
+                        default=10,
+                        type=int,
+                        help='Flocking frequency in Hz (default: 10)',
+                        metavar='')
     parser.add_argument(
         '--duration_sec',
         default=DEFAULT_DURATION_SEC,
@@ -214,15 +232,6 @@ if __name__ == "__main__":
         type=bool,
         help='Whether example is being run by a notebook (default: "False")',
         metavar='')
-    # waypoint 的路径
-    abs_path = os.path.dirname(os.path.abspath(__file__))
-    waypoints_path = "../config/waypoints/square.yaml"
-    waypoints_path = os.path.join(abs_path, waypoints_path)
-
-    parser.add_argument('--waypoints_file',
-                        default=waypoints_path,
-                        type=str,
-                        metavar='')
 
     ARGS = parser.parse_args()
     run(**vars(ARGS))
