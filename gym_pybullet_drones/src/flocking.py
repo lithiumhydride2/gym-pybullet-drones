@@ -33,7 +33,7 @@ from gym_pybullet_drones.utils.utils import sync, str2bool
 
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 
-DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad")
+DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
@@ -41,8 +41,9 @@ DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = False
 DEFAULT_SIMULATION_FREQ_HZ = 240
 DEFAULT_CONTROL_FREQ_HZ = 48
-DEFAULT_DURATION_SEC = 5
+DEFAULT_DURATION_SEC = 10
 DEFAULT_OUTPUT_FOLDER = 'results'
+DEFAULT_FLIGHT_HEIGHT = 1.5
 DEFAULT_COLAB = False
 
 
@@ -58,12 +59,12 @@ def run(drone=DEFAULT_DRONE,
         flocking_freq_hz=10,
         duration_sec=DEFAULT_DURATION_SEC,
         output_folder=DEFAULT_OUTPUT_FOLDER,
-        default_flight_hright=2.0,
+        default_flight_height=DEFAULT_FLIGHT_HEIGHT,
         colab=DEFAULT_COLAB):
     #### Initialize the simulation #############################
-    INIT_XYZS = np.array([[x, .0, default_flight_hright]
+    INIT_XYZS = np.array([[x * 1, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(num_drones)])  # 横一字排列
-    INIT_RPYS = np.zeros((num_drones, 3))  # 偏航角初始化为 0
+    INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
     PHY = Physics.PYB
 
     #### Create the environment ################################
@@ -72,13 +73,14 @@ def run(drone=DEFAULT_DRONE,
                          initial_xyzs=INIT_XYZS,
                          initial_rpys=INIT_RPYS,
                          physics=Physics.PYB,
-                         neighbourhood_radius=np.inf,
+                         neighbourhood_radius=10,
                          pyb_freq=simulation_freq_hz,
                          ctrl_freq=control_freq_hz,
                          gui=gui,
                          record=record_video,
                          obstacles=obstacles,
                          user_debug_gui=user_debug_gui,
+                         default_flight_height=default_flight_height,
                          use_reynolds=True)
 
     #### Obtain the PyBullet Client ID from the environment ####
@@ -87,7 +89,6 @@ def run(drone=DEFAULT_DRONE,
 
     #### Compute number of control steps in the simlation ######
     PERIOD = duration_sec
-    NUM_WP = control_freq_hz * PERIOD
 
     #### Initialize the logger #################################
     logger = Logger(logging_freq_hz=control_freq_hz,
@@ -109,11 +110,16 @@ def run(drone=DEFAULT_DRONE,
 
         flocking_command = env.get_command_reynolds(
             neighbors) + env.get_command_migration()
-        # 将 command 转化为 action space 内， X Y Z fract of MAX_SPEED_KMH
+        # 将 z轴速度设置为0
+        flocking_command[:, 2] = 0.0
+        # 将 command 转化为 action space 内， X Y Z
         command_norm = np.linalg.norm(flocking_command, axis=1, keepdims=True)
         flocking_command = flocking_command / command_norm
         flocking_command = np.hstack(
-            (flocking_command, command_norm / (env.MAX_SPEED_KMH / 3.6)))
+            (flocking_command,
+             np.min(
+                 (np.ones(command_norm.shape), command_norm / env.SPEED_LIMIT),
+                 axis=0)))  # 将最大速度限制在 speed_limit
         return flocking_command
 
     #### Run the simulation ####################################

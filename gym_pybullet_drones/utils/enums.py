@@ -7,7 +7,7 @@ class DroneModel(Enum):
     CF2X = "cf2x"  # Bitcraze Craziflie 2.0 in the X configuration
     CF2P = "cf2p"  # Bitcraze Craziflie 2.0 in the + configuration
     RACE = "racer"  # Racer drone in the X configuration
-    VSWARM_QUAD = "vswarm_quad/vswarm_quad"  # vswarm_quad 其实是 craziflie 换皮， 可以使用这二者控制器
+    VSWARM_QUAD = "vswarm_quad/vswarm_quad_dae"  # vswarm_quad 其实是 craziflie 换皮， 可以使用这二者控制器
 
 
 ################################################################################

@@ -31,6 +31,7 @@ class VelocityAviary(BaseAviary):
                  obstacles=False,
                  user_debug_gui=True,
                  use_reynolds=False,
+                 default_flight_height=1.0,
                  output_folder='results'):
         """Initialization of an aviary environment for or high-level planning.
 
@@ -88,11 +89,12 @@ class VelocityAviary(BaseAviary):
                          user_debug_gui=user_debug_gui,
                          output_folder=output_folder)
         #### Set a limit on the maximum target speed ###############
-        self.SPEED_LIMIT = 0.03 * self.MAX_SPEED_KMH * (1000 / 3600)
-
+        self.SPEED_LIMIT = 0.6  # 0.6 m/s
         #### reynolds #############
         # smooth factor 应该应用于此处
-        if use_reynolds:
+        self.use_reynolds = use_reynolds
+        self.default_flight_height = default_flight_height
+        if self.use_reynolds:
             self.reynolds = Reynolds()
         self.last_reynolds_command = None
 
@@ -168,7 +170,7 @@ class VelocityAviary(BaseAviary):
         if self.last_reynolds_command is None:
             self.last_reynolds_command = reynolds_commands
 
-        reynolds_commands = self.last_reynolds_command * smooth_factor + reynolds_commands + (
+        reynolds_commands = self.last_reynolds_command * smooth_factor + reynolds_commands * (
             1 - smooth_factor)
         self.last_reynolds_command = reynolds_commands  # 更新历史信息
 
@@ -238,13 +240,17 @@ class VelocityAviary(BaseAviary):
                 v_unit_vector = target_v[0:3] / np.linalg.norm(target_v[0:3])
             else:
                 v_unit_vector = np.zeros(3)
+            #### 如果在 reynolds 中, 需要设置默认飞行高度
+            target_pos = state[0:3]
+            if self.use_reynolds:
+                target_pos[2] = self.default_flight_height
             temp, _, _ = self.ctrl[k].computeControl(
                 control_timestep=self.CTRL_TIMESTEP,
                 cur_pos=state[0:3],
                 cur_quat=state[3:7],
                 cur_vel=state[10:13],
                 cur_ang_vel=state[13:16],
-                target_pos=state[0:3],  # same as the current position
+                target_pos=target_pos,  # same as the current position
                 target_rpy=np.array([0, 0, state[9]]),  # keep current yaw
                 target_vel=self.SPEED_LIMIT * np.abs(target_v[3]) *
                 v_unit_vector  # target the desired velocity vector

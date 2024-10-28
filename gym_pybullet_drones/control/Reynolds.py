@@ -24,6 +24,7 @@ class Reynolds():
         self.alignment_gain = config.get("alignment_gain", 1.0)
         self.migration_gain = config.get("migration_gain", 1.0)
         self.acceptance_radius = config.get("acceptance_radius", 3.0)
+        self.perception_radius = config.get("perception_radius", 5.0)
 
         waypoint_file = f"../config/waypoints/{waypoint_name}.yaml"
         waypoint_file = os.path.join(script_dir, waypoint_file)
@@ -41,7 +42,8 @@ class Reynolds():
         curr_command = self.__reynolds__(positions, velocities,
                                          self.separation_gain,
                                          self.cohesion_gain,
-                                         self.alignment_gain)
+                                         self.alignment_gain,
+                                         self.perception_radius)
         return curr_command
 
     def get_migration_command(self, positions):
