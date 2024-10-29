@@ -41,9 +41,9 @@ DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = False
 DEFAULT_SIMULATION_FREQ_HZ = 240
 DEFAULT_CONTROL_FREQ_HZ = 48
-DEFAULT_DURATION_SEC = 10
+DEFAULT_DURATION_SEC = 100
 DEFAULT_OUTPUT_FOLDER = 'results'
-DEFAULT_FLIGHT_HEIGHT = 1.5
+DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
 
 
@@ -64,7 +64,8 @@ def run(drone=DEFAULT_DRONE,
     #### Initialize the simulation #############################
     INIT_XYZS = np.array([[x * 1, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(num_drones)])  # 横一字排列
-    INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
+    INIT_RPYS = np.array([[0, 0, np.pi / 2]
+                          for x in range(num_drones)])  # 偏航角初始化为 0
     PHY = Physics.PYB
 
     #### Create the environment ################################
@@ -100,7 +101,7 @@ def run(drone=DEFAULT_DRONE,
 
     def flocking_update(step, action, neighbors: dict[set] = None):
         # 例如 40hz / 10hz , 则每4step, flocking 更新一次
-        if step % (env.CTRL_FREQ / flocking_freq_hz) != 0:
+        if step % int(round(env.CTRL_FREQ / flocking_freq_hz)) != 0:
             return action
         # 全链接的 neighbor
         neighbors = dict()
@@ -108,10 +109,10 @@ def run(drone=DEFAULT_DRONE,
             neighbors[i] = set(
                 list(range(0, i)) + list(range(i + 1, num_drones)))
 
-        flocking_command = env.get_command_reynolds(
-            neighbors) + env.get_command_migration()
-        # 将 z轴速度设置为0
-        flocking_command[:, 2] = 0.0
+        reynolds_command = env.get_command_reynolds(neighbors)
+        migration_command = env.get_command_migration()
+
+        flocking_command = reynolds_command + migration_command
         # 将 command 转化为 action space 内， X Y Z
         command_norm = np.linalg.norm(flocking_command, axis=1, keepdims=True)
         flocking_command = flocking_command / command_norm
@@ -157,9 +158,10 @@ def run(drone=DEFAULT_DRONE,
     env.close()
 
     #### Plot the simulation results ###########################
-    logger.save_as_csv("vel")  # Optional CSV save
+    # logger.save_as_csv("vel")  # Optional CSV save
     if plot:
         logger.plot()
+        logger.plot_traj()
 
 
 if __name__ == "__main__":

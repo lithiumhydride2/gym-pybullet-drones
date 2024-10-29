@@ -89,7 +89,7 @@ class VelocityAviary(BaseAviary):
                          user_debug_gui=user_debug_gui,
                          output_folder=output_folder)
         #### Set a limit on the maximum target speed ###############
-        self.SPEED_LIMIT = 0.6  # 0.6 m/s
+        self.SPEED_LIMIT = 0.6  # m/s
         #### reynolds #############
         # smooth factor 应该应用于此处
         self.use_reynolds = use_reynolds
@@ -156,14 +156,19 @@ class VelocityAviary(BaseAviary):
         drone_poses = drone_states[:, 0:3]
         drone_velocities = drone_states[:, 10:13]  # reynolds 可以使用速度对齐项
 
-        # 两次循环计算相对位置
+        # 两次循环计算相对位置与相对速度，仅考虑平面上的flocking
         relative_position = np.array([[
-            drone_poses[other, :] - drone_poses[ego, :]
+            drone_poses[other, :2] - drone_poses[ego, :2]
+            for other in neighbors[ego]
+        ] for ego in range(self.NUM_DRONES)])
+
+        relative_velocities = np.array([[
+            drone_velocities[other, :2] - drone_velocities[ego, :2]
             for other in neighbors[ego]
         ] for ego in range(self.NUM_DRONES)])
 
         reynolds_commands = np.array([
-            self.reynolds.command(relative_position[i])
+            self.reynolds.command(relative_position[i], relative_velocities[i])
             for i in range(self.NUM_DRONES)
         ])
 
@@ -174,6 +179,9 @@ class VelocityAviary(BaseAviary):
             1 - smooth_factor)
         self.last_reynolds_command = reynolds_commands  # 更新历史信息
 
+        # 添加z轴，将z轴reynolds_command 设置为0
+        reynolds_commands = np.hstack(
+            (reynolds_commands, np.zeros((self.NUM_DRONES, 1))))
         assert reynolds_commands.shape == (self.NUM_DRONES, 3)
         return reynolds_commands
 
@@ -183,11 +191,13 @@ class VelocityAviary(BaseAviary):
     ):
         '''
         Args:
-            neighbotr: 无人机间的邻接关系
+            neighbors: 无人机间的邻接关系
             waypoints: 从 yaml 文件中读取的所有 waypoints
         '''
         drone_states = self._computeObs()  # (num_drones * 20)
         drone_poses = drone_states[:, 0:3]
+        # z 轴速度不考虑
+        drone_poses[:, 2] = 0
         return self.reynolds.get_migration_command(drone_poses)
 
     ################################################################################

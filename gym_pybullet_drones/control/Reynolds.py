@@ -54,29 +54,29 @@ class Reynolds():
         if self.curr_waypoint_index == len(self.waypoints):
             self.curr_waypoint_index = 0  # 开始循环
         curr_waypoint = self.waypoints[self.curr_waypoint_index]
-        curr_waypoint = np.array([
-            curr_waypoint.get("x", 0.0),
-            curr_waypoint.get("y", 0.0),
-            curr_waypoint.get("z", 0.0)
-        ])
-        max_distance_to_curr = np.max(
-            np.linalg.norm(positions - curr_waypoint, axis=1))
+        # 将 z 轴设置为0
+        curr_waypoint = np.array(
+            [curr_waypoint.get("x", 0.0),
+             curr_waypoint.get("y", 0.0), 0])
 
-        if max_distance_to_curr <= self.acceptance_radius:
+        position_mean = np.mean(positions, axis=0)
+        distance_curr = np.linalg.norm(position_mean[:2] - curr_waypoint[:2])
+        if distance_curr <= self.acceptance_radius:
             print(
                 f"[INFO] Achieve waypoint {self.curr_waypoint_index}, and to next."
             )
+        else:
+            print(
+                f"[INFO] Arrive Point {self.curr_waypoint_index} with error {distance_curr}."
+            )
         num_drones = positions.shape[0]
 
-        # set z speed to zero
-        curr_waypoint[:2] = 0
         # TODO: 此处实际有一个坐标变换，还需要考虑坐标变换， 先未考虑旋转
         migration_command = np.array([
             (curr_waypoint - positions[i]) /
             np.linalg.norm(curr_waypoint - positions[i])
             for i in range(num_drones)
         ])
-
         return migration_command * self.migration_gain
 
     def __reynolds__(self,
