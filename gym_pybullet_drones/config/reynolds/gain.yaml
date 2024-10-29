@@ -1,5 +1,5 @@
 smoothing_factor: 0.3
-separation_gain: 11.0
+separation_gain: 6.0
 cohesion_gain: 1.0
 alignment_gain: 0.0
 migration_gain: 1.0

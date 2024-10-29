@@ -63,8 +63,9 @@ class Reynolds():
         distance_curr = np.linalg.norm(position_mean[:2] - curr_waypoint[:2])
         if distance_curr <= self.acceptance_radius:
             print(
-                f"[INFO] Achieve waypoint {self.curr_waypoint_index}, and to next."
+                f"[INFO] Arrived waypoint {self.curr_waypoint_index}, and to next."
             )
+            self.curr_waypoint_index += 1
         else:
             print(
                 f"[INFO] Arrive Point {self.curr_waypoint_index} with error {distance_curr}."

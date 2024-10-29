@@ -64,8 +64,7 @@ def run(drone=DEFAULT_DRONE,
     #### Initialize the simulation #############################
     INIT_XYZS = np.array([[x * 1, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(num_drones)])  # 横一字排列
-    INIT_RPYS = np.array([[0, 0, np.pi / 2]
-                          for x in range(num_drones)])  # 偏航角初始化为 0
+    INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
     PHY = Physics.PYB
 
     #### Create the environment ################################
