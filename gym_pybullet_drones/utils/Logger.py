@@ -313,13 +313,50 @@ class Logger(object):
         pkg_path = pkg_resources.resource_filename('gym_pybullet_drones', '')
         time_str = time.strftime("%Y%m%d-%H%M")
 
+        self.save_templete = os.path.join(pkg_path, self.OUTPUT_FOLDER,
+                                          "{}" + f"_{time_str}.png")
         try:
-            fig.savefig(fname=os.path.join(pkg_path, self.OUTPUT_FOLDER,
-                                           f"traj_{time_str}.png"),
-                        dpi=600)
+            fig.savefig(fname=self.save_templete.format("traj"), dpi=600)
         except Exception as e:
             print(e)
         # plt.show()
+
+        ################ 绘制其他 ####################
+        self.plotDistance()
+
+    def plotDistance(self):
+        poses = self.states[:, 0:3, :]
+
+        def calculate_distance(poses):
+            distances = np.linalg.norm(poses[:, np.newaxis] -
+                                       poses[np.newaxis, :],
+                                       axis=2)
+            return distances
+
+        distance = calculate_distance(poses)
+        # 去除重复元素
+        upper_triangular = np.triu(np.ones((self.NUM_DRONES, self.NUM_DRONES)))
+        distance = distance[~upper_triangular.astype(bool)]
+        # 计算无人机之间的距离
+        distance_main = np.mean(distance, axis=0)
+        distance_min = np.min(distance, axis=0)
+        distance_std = np.std(distance, axis=0)
+
+        t = np.arange(0, self.timestamps.shape[1] / self.LOGGING_FREQ_HZ,
+                      1 / self.LOGGING_FREQ_HZ)
+        # 这段复制
+        fig, ax = plt.subplots(1, 1, figsize=(5, 2))
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Distance (m)")
+        plt.ylim([0, 3])
+
+        ax.plot(t, distance_main, label="Mean")
+        ax.plot(t, distance_min, label="Min")
+        ax.plot(t, distance_std, label="Std")
+        ax.legend(loc="best")
+        plt.tight_layout()
+        plt.grid(True)
+        return distance
 
     def __set_plot(self, grid=False):
         if grid:

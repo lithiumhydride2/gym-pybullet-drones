@@ -31,17 +31,17 @@ from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 
-from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
+from gym_pybullet_drones.envs.FlockingAviary import FlockingAviary
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
-DEFAULT_GUI = True
+DEFAULT_GUI = False  # 默认不启用 gui
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
 DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = False
 DEFAULT_SIMULATION_FREQ_HZ = 240
 DEFAULT_CONTROL_FREQ_HZ = 48
-DEFAULT_DURATION_SEC = 100
+DEFAULT_DURATION_SEC = 10
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
@@ -68,7 +68,7 @@ def run(drone=DEFAULT_DRONE,
     PHY = Physics.PYB
 
     #### Create the environment ################################
-    env = VelocityAviary(drone_model=drone,
+    env = FlockingAviary(drone_model=drone,
                          num_drones=num_drones,
                          initial_xyzs=INIT_XYZS,
                          initial_rpys=INIT_RPYS,
@@ -102,13 +102,8 @@ def run(drone=DEFAULT_DRONE,
         # 例如 40hz / 10hz , 则每4step, flocking 更新一次
         if step % int(round(env.CTRL_FREQ / flocking_freq_hz)) != 0:
             return action
-        # 全链接的 neighbor
-        neighbors = dict()
-        for i in range(num_drones):
-            neighbors[i] = set(
-                list(range(0, i)) + list(range(i + 1, num_drones)))
 
-        reynolds_command = env.get_command_reynolds(neighbors)
+        reynolds_command = env.get_command_reynolds()
         migration_command = env.get_command_migration()
 
         flocking_command = reynolds_command + migration_command

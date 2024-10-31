@@ -55,3 +55,13 @@ class ObservationType(Enum):
     """Observation type enumeration class."""
     KIN = "kin"  # Kinematic information (pose, linear and angular velocities)
     RGB = "rgb"  # RGB camera capture in each drone's POV
+
+
+class FOVType(Enum):
+    '''
+        无人机 fov 的角度， 以无人机 ego_heading 为中心，数组两项分别为：
+        [negative, positive]
+    '''
+    SINGLE = [-1.1757, 1.1757]
+    DOUBLE = [-2.77999, 1.20765]
+    FOUR = [0, 0]

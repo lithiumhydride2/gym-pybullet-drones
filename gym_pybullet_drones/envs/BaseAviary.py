@@ -12,6 +12,7 @@ import numpy as np
 import pybullet as p
 import pybullet_data
 import gymnasium as gym
+from scipy.spatial.transform import Rotation as R
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ImageType
 
 
@@ -630,6 +631,40 @@ class BaseAviary(gym.Env):
             self.ang_v[nth_drone, :], self.last_clipped_action[nth_drone, :]
         ])
         return state.reshape(20, )
+
+    def ego2world(self, nth_drone, point: np.ndarray):
+        '''
+        将 nth_drone ego 坐标系下的 point 转化到 world 坐标系下
+
+        '''
+
+        pos = self.pos[nth_drone, :]
+        quad = self.quat[nth_drone, :]
+        rot_matrix = R.from_quat(quad).as_matrix().reshape(3, 3)
+        world_point = np.dot(rot_matrix, point) + pos
+        return world_point
+
+    def world2ego(self, nth_drone, point: np.ndarray):
+        '''
+        将 world 坐标系下 point transform 到 nth_dtone 机体坐标系下
+        '''
+        pos = self.pos[nth_drone, :]
+        quad = self.quat[nth_drone, :]
+        # 平移
+        ego_point = point - pos
+        rot_matrix = R.from_quat(quad).as_matrix().reshape(3, 3)
+        ego_point = np.dot(rot_matrix.T, ego_point)
+        return ego_point
+
+    def _computeHeading(self, nth_drone):
+        '''
+            计算无人机世界坐标系下的偏航角， 将四元数转化为相对世界坐标系的旋转
+        '''
+        rot_mat = np.array(p.getMatrixFromQuaternion(
+            self.quat[nth_drone, :])).reshape(3, 3)
+        target = np.array([1000, 0, 0])  # 机体坐标系下 heading 的方向
+        heading = np.dot(rot_mat, target)
+        return heading / np.linalg.norm(heading)
 
     ################################################################################
 
