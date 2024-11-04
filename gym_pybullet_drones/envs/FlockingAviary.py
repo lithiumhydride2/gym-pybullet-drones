@@ -106,45 +106,8 @@ class FlockingAviary(BaseAviary):
         ### fov config ############
         self.fov_range = fov_config.value
 
-    ################################################################################
-    def _computeFovMask(self, nth_drone):
-        '''
-        判断 nth_drone 的 FOV 之内有哪几个 无人机
-        '''
-        mask = np.zeros((self.NUM_DRONES, ))
-        drone_states = self._computeObs()
-        # 计算无人机当前在世界坐标系下的 heading 向量
-        ego_heading = self._computeHeading(nth_drone)
-
-        ########## 将 ego_heading 向指定的方向旋转指定角度，得到 fov_vector #########
-        fov_vector = np.array([
-            np.dot(
-                R.from_euler('z', theta,
-                             degrees=False).as_matrix().reshape(3, 3),
-                ego_heading) for theta in self.fov_range
-        ])
-
-        ## TODO 这里的 fov_vector 在机体坐标系中，如需进行坐标变换，需进行转换
-
-        def in_fov(point, fov_vector):
-            point = point[:2]  # 仅在水平面上进行判断
-            fov_vector = fov_vector[:, :2]
-            # 由于 fov 可能是大于 pi 的，因此需要这个判断
-            return_val = (np.cross(fov_vector[0], fov_vector[1]) *
-                          np.dot(fov_vector[0], fov_vector[1])) < 0
-            if ~return_val:
-                fov_vector = fov_vector[::-1]
-            if np.cross(fov_vector[0], point) >= 0 and np.cross(
-                    point, fov_vector[1]) >= 0:
-                return return_val
-            return ~return_val
-
-        for other in set(range(0, self.NUM_DRONES)) - set([nth_drone]):
-            mask[other] = int(
-                in_fov(self.world2ego(nth_drone, drone_states[other, 0:3]),
-                       fov_vector))
-
-        return mask
+        ### position estimation error level #####
+        self.position_noise_std = [0.11, 0.16, 0.22, 0.31, 0.42, 0.50]
 
     ################################################################################
 
@@ -196,13 +159,16 @@ class FlockingAviary(BaseAviary):
     def get_command_reynolds(self, smooth_factor=0.3):
         '''
         Args
-            neighbors: 用来表示无人机间邻居/观测关系，
+            neighbors: 用来表示无人机间邻居/观测关系
+            此处添加 对象的新属性 self.drone_states = self._computeObs()
         '''
 
         # observation_vector ### X        Y        Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ
-        drone_states = self._computeObs()  # (num_drones * 20)
-        drone_poses = drone_states[:, 0:3]
-        drone_velocities = drone_states[:, 10:13]  # reynolds 可以使用速度对齐项
+        # 更新状态，以供后续计算
+        self.drone_states = self._computeObs()  # (num_drones * 20)
+
+        drone_poses = self.drone_states[:, 0:3]
+        drone_velocities = self.drone_states[:, 10:13]  # reynolds 可以使用速度对齐项
 
         # 两次循环计算相对位置与相对速度，仅考虑平面上的flocking
         relative_position = np.array([[
@@ -248,13 +214,32 @@ class FlockingAviary(BaseAviary):
             neighbors: 无人机间的邻接关系
             waypoints: 从 yaml 文件中读取的所有 waypoints
         '''
-        drone_states = self._computeObs()  # (num_drones * 20)
-        drone_poses = drone_states[:, 0:3]
+
+        drone_poses = self.drone_states[:, 0:3]
         # z 轴速度不考虑
         drone_poses[:, 2] = 0
         return self.reynolds.get_migration_command(drone_poses)
 
     ################################################################################
+    def _computePositionEstimation(self, AdjacencyMat, nth_drone):
+        '''
+        根据无人机邻接矩阵，计算 nth_drone 无人机对出现在视野中无人机的位置估计结果
+        Args:
+            AdjacencyMat:  Adjacency mat 
+        '''
+        drone_poses = self.drone_states[:, 0:3]
+        poses_in_fov = drone_poses[nth_drone][AdjacencyMat[nth_drone].astype(
+            bool)]  # 筛选能够观测到的无人机绝对位置
+
+        poses_noise = []
+        ######### 添加测量噪声
+        for poses in poses_in_fov:
+            poses += np.random.normal(loc=0,
+                                      scale=self.position_noise_std[int(
+                                          np.linalg.norm(poses[:2]))])
+            poses_noise.append(poses)
+        return poses
+
     def _computeAdjacencyMatFOV(self):
         '''
         在考虑 fov 的情况下, 计算无人机间观测邻接矩阵
@@ -264,6 +249,46 @@ class FlockingAviary(BaseAviary):
             for nth_drone in range(self.NUM_DRONES)
         ])
         return mat
+
+    ################################################################################
+    def _computeFovMask(self, nth_drone):
+        '''
+        判断 nth_drone 的 FOV 之内有哪几个 无人机
+        '''
+        mask = np.zeros((self.NUM_DRONES, ))
+        # 计算无人机当前在世界坐标系下的 heading 向量
+        ego_heading = self._computeHeading(nth_drone)
+
+        ########## 将 ego_heading 向指定的方向旋转指定角度，得到 fov_vector #########
+        fov_vector = np.array([
+            np.dot(
+                R.from_euler('z', theta,
+                             degrees=False).as_matrix().reshape(3, 3),
+                ego_heading) for theta in self.fov_range
+        ])
+
+        ## TODO 这里的 fov_vector 在机体坐标系中，如需进行坐标变换，需进行转换
+
+        def in_fov(point, fov_vector):
+            point = point[:2]  # 仅在水平面上进行判断
+            fov_vector = fov_vector[:, :2]
+            # 由于 fov 可能是大于 pi 的，因此需要这个判断
+            return_val = (np.cross(fov_vector[0], fov_vector[1]) *
+                          np.dot(fov_vector[0], fov_vector[1])) < 0
+            if ~return_val:
+                fov_vector = fov_vector[::-1]
+            if np.cross(fov_vector[0], point) >= 0 and np.cross(
+                    point, fov_vector[1]) >= 0:
+                return return_val
+            return ~return_val
+
+        for other in set(range(0, self.NUM_DRONES)) - set([nth_drone]):
+            mask[other] = int(
+                in_fov(
+                    self.world2ego(nth_drone, self.drone_states[other, 0:3]),
+                    fov_vector))
+
+        return mask
 
     def _computeObs(self):
         """

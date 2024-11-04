@@ -349,6 +349,7 @@ class Logger(object):
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Distance (m)")
         plt.ylim([0, 3])
+        plt.xlim([0, self.timestamps.shape[1] / self.LOGGING_FREQ_HZ])
 
         ax.plot(t, distance_main, label="Mean")
         ax.plot(t, distance_min, label="Min")
@@ -356,7 +357,9 @@ class Logger(object):
         ax.legend(loc="best")
         plt.tight_layout()
         plt.grid(True)
-        return distance
+
+        ### 保存图片
+        fig.savefig(fname=self.save_templete.format("distance"), dpi=600)
 
     def __set_plot(self, grid=False):
         if grid:
