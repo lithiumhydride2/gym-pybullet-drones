@@ -7,7 +7,6 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import mean_squared_error
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, ConstantKernel
-import warnings
 from sklearn.exceptions import ConvergenceWarning
 from collections import deque
 
@@ -25,17 +24,16 @@ class GaussianProcessGroundTruth:
 
     def __init__(self, target_num=2, init_other_pose: list = None) -> None:
         """
-        # description : 由相对位置驱动
+        ### description : 由相对位置驱动
          ---------------
-        # param :
-         - target_num: 无人机的数量,默认为2
+        ### param :
+         - target_num: 其他无人机的数量
          - init_other_pose: [target_0.x target_0.y target_1.x target_1.y] 可能为 None
          ---------------
-        # returns :
+        ### returns :
          ---------------
         """
         self.target_num = target_num
-        # TODO：此处需要考虑位置的归一化问题，当前仅进行简单的归一化
         self._pose_max_val = 6.0  # 供归一化使用
         assert init_other_pose is not None
         self.mean = (np.array(init_other_pose).reshape(-1, 2) /
@@ -53,7 +51,6 @@ class GaussianProcessGroundTruth:
 
         self.trajectories = [self.mean.copy()]
         self.y_true_lists = [self.fn(self.grid)]
-        pass
 
     def step(self, other_pose: np.ndarray):
         """
