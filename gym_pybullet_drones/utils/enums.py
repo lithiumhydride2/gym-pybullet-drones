@@ -44,6 +44,7 @@ class ActionType(Enum):
     RPM = "rpm"  # RPMS
     PID = "pid"  # PID control
     VEL = "vel"  # Velocity input (using PID control)
+    YAW = "yaw"  # yaw angle in world coordinate, 连续性的
     ONE_D_RPM = "one_d_rpm"  # 1D (identical input to all motors) with RPMs
     ONE_D_PID = "one_d_pid"  # 1D (identical input to all motors) with PID control
 
@@ -55,6 +56,7 @@ class ObservationType(Enum):
     """Observation type enumeration class."""
     KIN = "kin"  # Kinematic information (pose, linear and angular velocities)
     RGB = "rgb"  # RGB camera capture in each drone's POV
+    GAUSSIAN = "gaussian"  # gaussian process of each drone in world and non rotation corrdinate
 
 
 class FOVType(Enum):

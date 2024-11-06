@@ -56,3 +56,20 @@ def str2bool(val):
     else:
         raise argparse.ArgumentTypeError(
             "[ERROR] in str2bool(), a Boolean value is expected")
+
+
+def in_fov(point, fov_vector):
+    '''
+        在水平面上判断 point 是否在 fov_vector 之内
+    '''
+    point = point[:2]  # 仅在水平面上进行判断
+    fov_vector = fov_vector[:, :2]
+    # 由于 fov 可能是大于 pi 的，因此需要这个判断
+    return_val = (np.cross(fov_vector[0], fov_vector[1]) *
+                  np.dot(fov_vector[0], fov_vector[1])) < 0
+    if ~return_val:
+        fov_vector = fov_vector[::-1]
+    if np.cross(fov_vector[0], point) >= 0 and np.cross(point,
+                                                        fov_vector[1]) >= 0:
+        return return_val
+    return ~return_val

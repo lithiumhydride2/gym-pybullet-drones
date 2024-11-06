@@ -656,6 +656,9 @@ class BaseAviary(gym.Env):
         ego_point = np.dot(rot_matrix.T, ego_point)
         return ego_point
 
+    def _getCurrTime(self):
+        return self.step_counter
+
     def _computeHeading(self, nth_drone):
         '''
             计算无人机世界坐标系下的偏航角， 将四元数转化为相对世界坐标系的旋转

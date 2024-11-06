@@ -117,7 +117,7 @@ class GaussianProcess:
         self.other_id = other_id
         self.fig_name = "UAV_{}_GP".format(self.id)
         self.color_map = plt.get_cmap("Set1").colors
-        # kernel
+        ########### guassian process for other uav
         if adaptive_kernel:
             # length_scale: 每个维度定义各自特征维度的长度尺度
             # length_scale_bounds: 参数可调整的上下限
@@ -133,6 +133,7 @@ class GaussianProcess:
             self.gp = GaussianProcessRegressor(kernel=self.kernel,
                                                optimizer=None,
                                                n_restarts_optimizer=20)
+        ############ gaussian process for FOV
         self.negitive_kernel_length_scale = [2, 2, 4]
         self.negitive_kernel = Matern(
             length_scale=self.negitive_kernel_length_scale, nu=1.5)
@@ -142,6 +143,7 @@ class GaussianProcess:
         self.neg_observed_value = deque()
         self.fov_mask_queue = deque()
         self.neg_std_at_grid = None
+        ############# stack for information
         self.observed_points = []
         self.observed_value = []
         self.node_coords = node_coords
@@ -339,24 +341,25 @@ class GaussianProcess:
 
 class GaussianProcessWrapper:
 
-    def __init__(self, num_uav: int, node_coords: np.ndarray, id=0) -> None:
+    def __init__(self,
+                 num_uav: int,
+                 other_list: list[int],
+                 node_coords: np.ndarray,
+                 id=0) -> None:
         """
-        # description :
-         ---------------
-        # param :
+        ### param :
          - num_uav: 无人机总数量
+         - other_list: list of other index
          - node_coords: 随机初始化的一组点(初始观测),in shape(-1,2)
-         - id: 无人机自身编号 1 ~ num_uav
+         - id: 无人机自身编号 0 ~ num_uav - 1
          ---------------
-        # returns :
+        ### returns :
          ---------------
         """
 
         self.num_uav = num_uav
-        assert id > 0
         self.id = id
-        self.other_list = list(range(1, self.id)) + list(
-            range(self.id + 1, num_uav + 1))
+        self.other_list = other_list
         self.node_coords = node_coords
         self.GPs: list[GaussianProcess] = [
             GaussianProcess(
@@ -370,6 +373,13 @@ class GaussianProcessWrapper:
         self.kTargetExistBeliefThreshold = 0.4
         self.kHighInfoIdxThreshold = math.exp(-0.5)
         self.kAddNegitiveGP = True
+
+    def GPbyOtherID(self, id):
+        for gp in self.GPs:
+            if id == gp.other_id:
+                return gp
+        # if not find this gp
+        raise KeyError
 
     def add_init_measures(self, all_point_pos):
         for i, gp in enumerate(self.GPs):

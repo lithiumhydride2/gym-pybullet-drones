@@ -68,8 +68,10 @@ def run(drone=DEFAULT_DRONE,
     PHY = Physics.PYB
 
     #### Create the environment ################################
+    control_by_RL_mask = np.array([1] * num_drones).astype(bool)
     env = FlockingAviary(drone_model=drone,
                          num_drones=num_drones,
+                         control_by_RL_mask=control_by_RL_mask,
                          initial_xyzs=INIT_XYZS,
                          initial_rpys=INIT_RPYS,
                          physics=Physics.PYB,

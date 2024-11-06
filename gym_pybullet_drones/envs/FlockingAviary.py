@@ -2,18 +2,23 @@ import os
 import numpy as np
 from gymnasium import spaces
 from gym_pybullet_drones.envs.BaseAviary import BaseAviary
-from gym_pybullet_drones.utils.enums import DroneModel, Physics, FOVType
+from gym_pybullet_drones.envs.BaseRLAviary import BaseRLAviary
+from gym_pybullet_drones.utils.enums import DroneModel, Physics, FOVType, ActionType, ObservationType
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.control.Reynolds import Reynolds
 from gym_pybullet_drones.envs.gaussian_process.uav_gaussian import UAVGaussian as decision
 from scipy.spatial.transform import Rotation as R
+from gym_pybullet_drones.utils.utils import *
 
 
-class FlockingAviary(BaseAviary):
+class FlockingAviary(BaseRLAviary):
     """
-    Multi-drone environment class for high-level planning.
+    Multi-drone RL environment class for high-level planning.
+    需要将继承的 BaseAviary 替换成为 BaseRLAviary 
 
     Aviary 鸟笼， 类似前面代码中的 env
+    Action space: 暂定仅有 heading 控制指令
+    Observation space: 高斯过程的拟合结果 or 计算的最终结果。
     """
 
     ################################################################################
@@ -21,7 +26,7 @@ class FlockingAviary(BaseAviary):
     def __init__(self,
                  drone_model: DroneModel = DroneModel.CF2X,
                  num_drones: int = 1,
-                 control_by_decision_mask=np.zeros((1, )),
+                 control_by_RL_mask=np.zeros((1, )).astype(bool),
                  neighbourhood_radius: float = np.inf,
                  initial_xyzs=None,
                  initial_rpys=None,
@@ -35,7 +40,9 @@ class FlockingAviary(BaseAviary):
                  use_reynolds=True,
                  default_flight_height=1.0,
                  output_folder='results',
-                 fov_config: FOVType = FOVType.SINGLE):
+                 fov_config: FOVType = FOVType.SINGLE,
+                 obs: ObservationType = ObservationType.GAUSSIAN,
+                 act: ActionType = ActionType.YAW):
         """Initialization of an aviary environment for or high-level planning.
 
         Parameters
@@ -45,7 +52,7 @@ class FlockingAviary(BaseAviary):
             drone model  传入方式仅为 enum, 作为 urdf 文件的索引
         num_drones : int, optional
             The desired number of drones in the aviary.
-        control_by_decision_mask: np.ndarray:
+        control_by_RL_mask: np.ndarray:
             in shape(num_drones,).astype(bool), 表示哪些无人机受到 decision 控制
         neighbourhood_radius : float, optional
             Radius used to compute the drones' adjacency matrix, in meters.
@@ -71,6 +78,10 @@ class FlockingAviary(BaseAviary):
             是否使用 reynolds 模型
         fov_config: FOVtype
             使用哪种 fov 配置
+        obs: ObservationType
+            The type of observation space
+        act: ActionType
+            The type of action space
         """
         #### Create integrated controllers #########################
         os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'  # 和某个并行运算库相关
@@ -83,6 +94,29 @@ class FlockingAviary(BaseAviary):
                               )  # 此处 vswarm_quad 是套壳的 cf2x ，因此使用 cf2x 的控制方法
                 for i in range(num_drones)
             ]
+
+        #### reynolds #############
+        self.use_reynolds = use_reynolds
+        self.default_flight_height = default_flight_height
+        if self.use_reynolds:
+            self.reynolds = Reynolds()
+        self.last_reynolds_command = None
+
+        self.fov_range = fov_config.value
+
+        ### position estimation error level #####
+        self.position_noise_std = [0.11, 0.16, 0.22, 0.31, 0.42, 0.50, 0.60]
+
+        ### decision
+        self.decisions = {}
+        self.control_by_RL_mask = control_by_RL_mask
+        for nth, mask in enumerate(control_by_RL_mask):
+            if mask:
+                self.decisions[nth] = decision(nth_drone=nth,
+                                               num_drone=num_drones,
+                                               planner="tsp")
+
+        ######### finally, super.__init__()
         super().__init__(drone_model=drone_model,
                          num_drones=num_drones,
                          neighbourhood_radius=neighbourhood_radius,
@@ -95,31 +129,15 @@ class FlockingAviary(BaseAviary):
                          record=record,
                          obstacles=obstacles,
                          user_debug_gui=user_debug_gui,
-                         output_folder=output_folder)
+                         output_folder=output_folder,
+                         obs=obs,
+                         act=act)
         #### Set a limit on the maximum target speed ###############
-        self.SPEED_LIMIT = 0.6  # m/s
-
-        #### reynolds #############
-        self.use_reynolds = use_reynolds
-        self.default_flight_height = default_flight_height
-        if self.use_reynolds:
-            self.reynolds = Reynolds()
-        self.last_reynolds_command = None
-
-        ### fov config ############
-        self.fov_range = fov_config.value
-
-        ### position estimation error level #####
-        self.position_noise_std = [0.11, 0.16, 0.22, 0.31, 0.42, 0.50, 0.60]
-
-        ### decision
-        self.decisions = {}
-        self.control_by_decision_mask = control_by_decision_mask
-        for nth, mask in enumerate(control_by_decision_mask):
-            if mask:
-                self.decisions[nth] = decision(nth_drone=nth,
-                                               num_drone=num_drones,
-                                               planner="tsp")
+        if self.ACT_TYPE == ActionType.YAW:
+            self.SPEED_LIMIT = 0.6  # m/s
+        ######### decision freq
+        self.DECISION_FREQ = 5
+        self.DECISION_PER_PYB = int(self.PYB_FREQ / self.DECISION_FREQ)
 
     ################################################################################
 
@@ -129,14 +147,18 @@ class FlockingAviary(BaseAviary):
         Returns
         -------
         spaces.Box
-            An ndarray of shape (NUM_DRONES, 4) for the commanded velocity vectors.
-
+            An ndarray of shape (NUM_DRONES, 1) for the commanded yaw action vectors.
+        Note
+            原项目并不兼容仅部分无人机被RL控制的算法，这里兼容仅部分无人机受RL控制
         """
         #### Action vector ######### X       Y       Z   fract. of MAX_SPEED_KMH
-        act_lower_bound = np.array([[-1, -1, -1, 0]
-                                    for i in range(self.NUM_DRONES)])
-        act_upper_bound = np.array([[1, 1, 1, 1]
-                                    for i in range(self.NUM_DRONES)])
+        if self.ACT_TYPE == ActionType.YAW:
+            act_lower_bound = np.array(
+                [-1 for mask in self.control_by_RL_mask if mask])
+            act_upper_bound = np.array(
+                [1 for mask in self.control_by_RL_mask if mask])
+        else:
+            print("[ERROR] in FlockingAviary._actionspace()")
         return spaces.Box(low=act_lower_bound,
                           high=act_upper_bound,
                           dtype=np.float32)
@@ -152,41 +174,69 @@ class FlockingAviary(BaseAviary):
             The observation space, i.e., and ndarray of shape (NUM_DRONES, 20).
 
         """
-        #### Observation vector ### X        Y        Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ       WX       WY       WZ       P0            P1            P2            P3
-        obs_lower_bound = np.array([[
-            -np.inf, -np.inf, 0., -1., -1., -1., -1., -np.pi, -np.pi, -np.pi,
-            -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, 0., 0., 0.,
-            0.
-        ] for i in range(self.NUM_DRONES)])
-        obs_upper_bound = np.array([[
-            np.inf, np.inf, np.inf, 1., 1., 1., 1., np.pi, np.pi, np.pi,
-            np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, self.MAX_RPM,
-            self.MAX_RPM, self.MAX_RPM, self.MAX_RPM
-        ] for i in range(self.NUM_DRONES)])
+        if self.OBS_TYPE == ObservationType.GAUSSIAN:
+            heat_map_sz = 40**2
+            obs_lower_bound = np.array([
+                -1.0 * np.ones((heat_map_sz, ))
+                for mask in self.control_by_RL_mask if mask
+            ])
+            obs_upper_bound = np.array([
+                np.ones((heat_map_sz, )) for mask in self.control_by_RL_mask
+                if mask
+            ])
         return spaces.Box(low=obs_lower_bound,
                           high=obs_upper_bound,
                           dtype=np.float32)
 
+    def _computeObs(self):
+        '''
+        Return the current observation of the environment.
+        ## Description:
+            self.drone_poses 在此处得到更新
+        '''
+        self.drone_states = self._computeDroneState()
+        # step_counter 对pyb freq 进行计数
+
+        self.decisions: dict[int, decision]
+
+        if self.OBS_TYPE == ObservationType.GAUSSIAN:
+            ############ obs type in gaussian
+            if self.step_counter % self.DECISION_PER_PYB == 0:
+                adjacency_Mat = self._computeAdjacencyMatFOV()
+                # 由 detection step 获得观测
+                obs = []
+                relative_position = self._relative_position
+                for nth, mask in enumerate(self.control_by_RL_mask):
+                    if mask:
+                        obs_nth = self.decisions[nth].step(
+                            curr_time=self.step_counter * self.PYB_TIMESTEP,
+                            detection_map=self._computePositionEstimation(
+                                adjacency_Mat, nth),
+                            ego_heading=self._computeHeading(nth),
+                            fov_vector=self._computeFovVector(nth),
+                            relative_pose=relative_position[nth])
+                        obs.append(obs_nth)
+
     ################################################################################
+    @property
+    def _relative_position(self):
+        drone_poses = self.drone_states[:, 0:3]
+        return np.array([[
+            drone_poses[other, :2] - drone_poses[ego, :2]
+            for other in range(self.NUM_DRONES)
+        ] for ego in range(self.NUM_DRONES)])
+
     def get_command_reynolds(self, smooth_factor=0.3):
         '''
         Args
             neighbors: 用来表示无人机间邻居/观测关系
-            此处添加 对象的新属性 self.drone_states = self._computeObs()
         '''
 
         # observation_vector ### X        Y        Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ
-        # 更新状态，以供后续计算
-        self.drone_states = self._computeObs()  # (num_drones * 20)
-
-        drone_poses = self.drone_states[:, 0:3]
         drone_velocities = self.drone_states[:, 10:13]
 
         # 两次循环计算相对位置与相对速度，仅考虑平面上的flocking
-        relative_position = np.array([[
-            drone_poses[other, :2] - drone_poses[ego, :2]
-            for other in range(self.NUM_DRONES)
-        ] for ego in range(self.NUM_DRONES)])
+        relative_position = self._relative_position
 
         relative_velocities = np.array([[
             drone_velocities[other, :2] - drone_velocities[ego, :2]
@@ -198,7 +248,7 @@ class FlockingAviary(BaseAviary):
 
         #### 对于由 decision 控制的无人机，计算其相对位置估计
         relative_position_observation = {}
-        for nth_drone, mask in enumerate(self.control_by_decision_mask):
+        for nth_drone, mask in enumerate(self.control_by_RL_mask):
             if mask:
                 relative_position_observation[
                     nth_drone] = self._computePositionEstimation(
@@ -244,10 +294,10 @@ class FlockingAviary(BaseAviary):
         Args:
             AdjacencyMat:  Adjacency mat 
         Return:
-            Detection_map : key(nth_drone):value(pos estimation)
+            Detection_map : key(nth_drone):value(pos estimation in 2D)
         '''
         drone_poses = self.drone_states[:, 0:3]
-        poses_in_fov = drone_poses[nth_drone][AdjacencyMat[nth_drone].astype(
+        poses_in_fov = drone_poses[AdjacencyMat[nth_drone].astype(
             bool)]  # 筛选能够观测到的无人机绝对位置
         pose_index_in_fov = np.array(list(range(
             self.NUM_DRONES)))[AdjacencyMat[nth_drone].astype(bool)]
@@ -259,11 +309,12 @@ class FlockingAviary(BaseAviary):
                 min(
                     len(self.position_noise_std) - 1,
                     np.linalg.norm(pose[:2])))
+            # np.sqrt(2) 是假设 x,y 轴噪声水平相当的情况，添加噪声
             pose += np.random.normal(
                 loc=0,
                 scale=self.position_noise_std[noise_index],
-                size=pose.shape[0])
-            detection_map[index] = pose
+                size=pose.shape[0]) / np.sqrt(2)
+            detection_map[index] = pose[:2]
         return detection_map
 
     def _computeAdjacencyMatFOV(self):
@@ -277,35 +328,24 @@ class FlockingAviary(BaseAviary):
         return mat
 
     ################################################################################
-    def _computeFovMask(self, nth_drone):
-        '''
-        判断 nth_drone 的 FOV 之内有哪几个 无人机
-        '''
-        mask = np.zeros((self.NUM_DRONES, ))
-        # 计算无人机当前在世界坐标系下的 heading 向量
-        ego_heading = self._computeHeading(nth_drone)
 
-        ########## 将 ego_heading 向指定的方向旋转指定角度，得到 fov_vector #########
+    def _computeFovVector(self, nth_drone):
+        ego_heading = self._computeHeading(nth_drone)
         fov_vector = np.array([
             np.dot(
                 R.from_euler('z', theta,
                              degrees=False).as_matrix().reshape(3, 3),
                 ego_heading) for theta in self.fov_range
         ])
+        return fov_vector
 
-        def in_fov(point, fov_vector):
-            point = point[:2]  # 仅在水平面上进行判断
-            fov_vector = fov_vector[:, :2]
-            # 由于 fov 可能是大于 pi 的，因此需要这个判断
-            return_val = (np.cross(fov_vector[0], fov_vector[1]) *
-                          np.dot(fov_vector[0], fov_vector[1])) < 0
-            if ~return_val:
-                fov_vector = fov_vector[::-1]
-            if np.cross(fov_vector[0], point) >= 0 and np.cross(
-                    point, fov_vector[1]) >= 0:
-                return return_val
-            return ~return_val
-
+    def _computeFovMask(self, nth_drone):
+        '''
+        判断 nth_drone 的 FOV 之内有哪几个 无人机
+        '''
+        mask = np.zeros((self.NUM_DRONES, ))
+        # 计算无人机当前在世界坐标系下的 fov vector
+        fov_vector = self._computeFovVector(nth_drone)
         for other in set(range(0, self.NUM_DRONES)) - set([nth_drone]):
             mask[other] = int(
                 in_fov(
@@ -314,7 +354,7 @@ class FlockingAviary(BaseAviary):
 
         return mask
 
-    def _computeObs(self):
+    def _computeDroneState(self):
         """
         此处的 obs 是针对于环境的 obs,计算 reynolds 是针对于 每个无人机个体的 obs
         Returns the current observation of the environment.

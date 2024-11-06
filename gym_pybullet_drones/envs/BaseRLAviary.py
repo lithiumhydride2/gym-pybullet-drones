@@ -25,6 +25,9 @@ class BaseRLAviary(BaseAviary):
                  ctrl_freq: int = 240,
                  gui=False,
                  record=False,
+                 obstacles=False,
+                 user_debug_gui=False,
+                 output_folder: str = "results",
                  obs: ObservationType = ObservationType.KIN,
                  act: ActionType = ActionType.RPM):
         """Initialization of a generic single and multi-agent RL environment.
@@ -93,14 +96,14 @@ class BaseRLAviary(BaseAviary):
             gui=gui,
             record=record,
             obstacles=
-            True,  # Add obstacles for RGB observations and/or FlyThruGate
+            obstacles,  # Add obstacles for RGB observations and/or FlyThruGate
             user_debug_gui=
-            False,  # Remove of RPM sliders from all single agent learning aviaries
+            user_debug_gui,  # Remove of RPM sliders from all single agent learning aviaries
             vision_attributes=vision_attributes,
-        )
+            output_folder=output_folder)
         #### Set a limit on the maximum target speed ###############
         if act == ActionType.VEL:
-            ### TODO 这里为何要将速度限制为 max 的 0.03 倍？
+            ### speed_limit 在 FlockingAviary 中得到设置
             self.SPEED_LIMIT = 0.03 * self.MAX_SPEED_KMH * (1000 / 3600)
 
     ################################################################################
@@ -321,6 +324,7 @@ class BaseRLAviary(BaseAviary):
     def _computeObs(self):
         """Returns the current observation of the environment.
 
+        在 MultiHoverAviary 中, env的obs也从此处获得, 对于多无人机的rl,obs也是这样获得的。
         Returns
         -------
         ndarray
@@ -360,7 +364,7 @@ class BaseRLAviary(BaseAviary):
                     ret,
                     np.array([
                         self.action_buffer[i][j, :]
-                        for j in range(self.NUM_DRONES)
+                        for j in range(self.NUM_FDRONES)
                     ])
                 ])
             return ret
