@@ -19,17 +19,20 @@ class UAVGaussian():
 
     def __init__(
         self,
+        fov_range,
         nth_drone=0,
         num_drone=3,
         planner="tsp",
         **kwargs,
     ) -> None:
         """
-        # description :
+        ## description :
          ---------------
-        # param :
+        ## param :
          - id: 无人机编号, 为 1 ~ num_uav
          - planner: tsp|rl
+        ## kwargs:
+         - enable_exploration: 是否使能探索功能
         """
 
         self.id = nth_drone
@@ -61,23 +64,19 @@ class UAVGaussian():
         ################### planner select ##############
 
         if planner == "tsp":
-            pass
-            # self.planner = TSPBaseLine(
-            #     num_latent_target=self.num_latent_target,
-            #     mode_simulation=self.planner_debug_msg,
-            #     fake_fov_range=self.fake_fov_range,
-            #     **kwargs)
+            self.planner = TSPBaseLine(
+                num_latent_target=self.num_latent_target,
+                fake_fov_range=fov_range,
+                **kwargs)
         else:
             raise NameError
         # fov 需要设置为参数
-        self.fake_fov = np.deg2rad([-20, 20])
-        self.fake_fov_list = []
         self.ego_heading = 0.0  # 自身朝向状态量
         self.last_ego_heading = 0.0  # 上一个朝向状态量
         self.last_yaw_action = 0.0  # 上一个朝向输出
-        self.kApproveNextActionHeadingThreshold = np.deg2rad(3)
 
-        self.kFovEffectGP = True  # FOV信息是否影响高斯过程
+        # 首先关闭 FOV 对高斯过程的影响
+        self.kFovEffectGP = False  # FOV信息是否影响高斯过程
         self.last_negitive_sample_time = 0.0
 
     def __update_relative_pos(self):
@@ -150,7 +149,10 @@ class UAVGaussian():
         ##### 触发 fov 影响的采集
         if self.kFovEffectGP and self.negitive_gather:
             neg_std = self.GP_detection.update_negititve_gps(
-                X=np.zeros((1, 2)), Y=0, time=time, mask=self.__get_fov_mask())
+                X=np.zeros((1, 2)),
+                Y=0,
+                time=time,
+                mask=self.__get_fov_mask(fov_vector))
             all_std = np.min(np.array([neg_std, all_std]), axis=0)
         ##### 否则叠加最新的 fov effect
         elif self.kFovEffectGP and len(self.all_stds_list):
@@ -232,35 +234,42 @@ class UAVGaussian():
         action [vx,vy,yaw]
         """
         self.curr_time = curr_time
+        self.ego_heading = ego_heading
 
         # GP_step
         all_std = self._gp_step(detection_map=detection_map,
                                 other_pose=relative_pose,
+                                ego_heading=ego_heading,
+                                fov_vector=fov_vector,
                                 time=curr_time)
         return all_std
 
+    def DecisionStep(self, obs):
+        '''
+        Args:
+            obs: 从 gp_step 中得到的 obs, 为 heat_map 的形式
+        '''
         action = np.zeros(3)
         action = self.planner.step(self.GP_detection,
-                                   detection_map=detection_map,
                                    curr_t=self.curr_time,
                                    ego_heading=self.ego_heading,
-                                   std_at_grid=all_std)
+                                   std_at_grid=obs)
 
         # history
         self.last_ego_heading = self.ego_heading
         self.last_yaw_action = action[-1]
 
         # metrices
-        if self.fake_ros:
-            all_pred, _, _ = self.GP_detection.update_grids(self.curr_time)
-            JS = self.GP_detection.eval_all_js(
-                np.max(self.GP_ground_truth.y_true_lists[-1], axis=-1),
-                all_pred)
-            _, UNC = self.GP_detection.eval_unc_with_grid(std_at_grid=all_std)
-            _, FOV_UNC = self.GP_detection.eval_unc_with_grid(
-                high_info_idx=np.array([[]] * self.num_latent_target),
-                std_at_grid=all_std)
-            self.metrics_obj.step(jsd=JS, unc=UNC, fovunc=FOV_UNC)
+        # if self.fake_ros:
+        #     all_pred, _, _ = self.GP_detection.update_grids(self.curr_time)
+        #     JS = self.GP_detection.eval_all_js(
+        #         np.max(self.GP_ground_truth.y_true_lists[-1], axis=-1),
+        #         all_pred)
+        #     _, UNC = self.GP_detection.eval_unc_with_grid(std_at_grid=all_std)
+        #     _, FOV_UNC = self.GP_detection.eval_unc_with_grid(
+        #         high_info_idx=np.array([[]] * self.num_latent_target),
+        #         std_at_grid=all_std)
+        #     self.metrics_obj.step(jsd=JS, unc=UNC, fovunc=FOV_UNC)
         return action
 
     def save_animation(self, **kwargs):

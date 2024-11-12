@@ -107,7 +107,7 @@ class UavDetectionSim:
     def __in_fov(self, point: np.ndarray):
         point = point.squeeze()
         # fov 与计算坐标系存在转换
-        fov_angle = self.fake_fov + np.pi / 2
+        fov_angle = self.fake_fov
         fov_vector = [
             np.array([np.cos(fov), np.sin(fov)]) for fov in fov_angle
         ]

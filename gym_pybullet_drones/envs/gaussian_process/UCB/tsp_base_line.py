@@ -1,14 +1,11 @@
-from ast import List
-from asyncio import as_completed
 import time
 import concurrent.futures
-import cProfile
-from turtle import heading
 import numpy as np
 from ..gaussian_process import GaussianProcessWrapper
 from .motion_primitive import MotionPrimitive
 from .uav_detection_sim import UavDetectionSim
 from python_tsp.exact import solve_tsp_dynamic_programming as tsp_solver
+from gym_pybullet_drones.utils.utils import *
 
 
 def multi_thread_func(detection_sims: "list[UavDetectionSim]", ego_heading,
@@ -19,17 +16,18 @@ def multi_thread_func(detection_sims: "list[UavDetectionSim]", ego_heading,
 
     curr_reward = detection_sim.step(motion_primitive.headings[index],
                                      motion_primitive.time_span)
-    # curr_reward = detection_sim.step_primitive(
-    #     motion_primitive.motion_primitive[index], motion_primitive.time_span)
     return curr_reward
 
 
 class TSPBaseLine:
 
-    def __init__(self, num_latent_target=1, **kwargs) -> None:
+    def __init__(self,
+                 num_latent_target=1,
+                 fake_fov_range=[0, 0],
+                 **kwargs) -> None:
         '''
         kwargs:
-            mode_simulation: 是否为仿真模式的标志位
+            fake_fov_range: fov的边界，以vector形式展现
         '''
         self.distance_matrix = None
         self.observed_target = {}  # key: 潜在目标索引, val: tuple(置信度，固定坐标系中角度)
@@ -43,7 +41,7 @@ class TSPBaseLine:
         self.action_none = np.zeros(3, )
         self.last_action = np.zeros(3, )
         self.kUseDetectionMap = False
-
+        self.fake_fov_range = fake_fov_range
         ### 常量
         self.kTargetBeliefThreshold = 0.5  # 若对某目标置信度低于该阈值，加入待访问节点
         self.kTargetExistBeliefThreshold = 0.1  # 若置信度低于此值，则认为环境中目标不存在
@@ -52,9 +50,6 @@ class TSPBaseLine:
         self.selected_motion_primitive = None
         self.last_motion_primitive = None
         self.motion_index = None
-
-        self.mode_simulation = kwargs.get("mode_simulation", False)
-        self.fake_fov_range = kwargs.get("fake_fov_range", [0, 0])
         self.warning_error_msg = ""
 
         # detection sim
@@ -78,25 +73,30 @@ class TSPBaseLine:
             return True
         return False
 
-    def step(self, gp_wrapper: 'GaussianProcessWrapper' = None, **kwargs):
+    def step(self,
+             gp_wrapper: 'GaussianProcessWrapper' = None,
+             curr_t=0.0,
+             ego_heading=0.0,
+             std_at_grid=None):
         """
-        # description :
-        使用 TSP 方法处理 gp_wrapper
+        ## description :
+        - 使用 TSP 方法处理 gp_wrapper
          --------------- 
-        # param :
+        ## param :
          - gp_wrapper:  GaussianProcessWrapper
-         - detection_map: detection_map
+         - curr_t: time_stamp of decision
+         - ego_heading: ego heading in world axis
+         - std_at_grid: obs of as "all_std"
          --------------- 
-        # returns :
-        运动基元的索引、该运动基元
+        ## returns :
+        - 运动基元的索引、该运动基元
         """
-        if self.kUseDetectionMap:
-            detection_map = kwargs.get("detection_map", {})
-        else:
-            detection_map = {}  # TSP 中起到作用的是 self.observed_target
-        self.curr_t = kwargs.get("curr_t", 0.0)
-        self.ego_heading = kwargs.get("ego_heading", 0.0)
-        self.std_at_grid = kwargs.get("std_at_grid", None)
+
+        detection_map = {}  # TSP 中起到作用的是 self.observed_target
+
+        self.curr_t = curr_t
+        self.ego_heading = ego_heading
+        self.std_at_grid = std_at_grid
 
         # check if need to resolve tsp
         keys_to_visit = 0
@@ -109,16 +109,13 @@ class TSPBaseLine:
             keys_to_visit = self.__update_tsp_problem()
             heading = self.__tsp_post_process(keys_to_visit,
                                               gp_wrapper=gp_wrapper)
-            if self.mode_simulation:
-                self.warning_error_msg += "get new heading: {} at time {} \n".format(
-                    str(heading), self.curr_t)
 
         return self.__get_action_no_wait()
 
-    def __update_detection(self, gp_wrapper: 'GaussianProcessWrapper',
-                           detection_map: dict):
+    def __update_detection(self, gp_wrapper: 'GaussianProcessWrapper'):
         '''
         根据当前观测, 更新 self.ovserved_target
+        提取 belief 中阈值高于 kTargetExistBeliefThreshold 的对象
         '''
         # reset
         self.observed_target = {}
@@ -127,13 +124,7 @@ class TSPBaseLine:
             self.grid_size = gp_wrapper.GPs[0].grid_size
 
         for index, gp in enumerate(gp_wrapper.GPs):
-            if index in detection_map:
-                # tuple (configdence, normalized position)
-                # 该 观测点在 不考虑航向的 机体坐标系下
-                self.observed_target[index] = (1.0,
-                                               point_heading(
-                                                   detection_map[index]))
-            elif gp.y_pred_at_grid is None:
+            if gp.y_pred_at_grid is None:
                 continue
             else:
                 y_pred_grid = gp.y_pred_at_grid.reshape(
@@ -207,14 +198,14 @@ class TSPBaseLine:
             # TODO(lih): 在此处加入探索
             if len(self.observed_target) == self.num_latent_target:
                 primitive_idx = 0  # 无需偏转
-            # else:
-            #     primitive_idx = self.__exploration(gp_wrapper)
-            elif len(self.observed_target) and len(self.observed_target) < min(
-                    self.num_latent_target, 4):
-                # exploration here\
-                primitive_idx = self.__exploration(gp_wrapper)
             else:
-                primitive_idx = self.motion_primitive.num_primitive - 1  # 最大偏转
+                primitive_idx = self.__exploration(gp_wrapper)
+            # elif len(self.observed_target) and len(self.observed_target) < min(
+            #         self.num_latent_target, 4):
+            #     # exploration here\
+            #     primitive_idx = self.__exploration(gp_wrapper)
+            # else:
+            #     primitive_idx = self.motion_primitive.num_primitive - 1  # 最大偏转
         else:
             # 在已经对所有潜在目标进行观测时，选择最合适的运动基元
             for key in keys_to_visit:
@@ -236,7 +227,6 @@ class TSPBaseLine:
         2. 对于每个运动基元，估计应用该基元后的 unc
         '''
         if not self.kEnableExploartion:
-            # random search
             return np.random.randint(self.motion_primitive.num_primitive)
         try:
             curr_neg_unc_list, curr_neg_unc = gp_wrapper.eval_unc_with_grid(
@@ -280,28 +270,5 @@ class TSPBaseLine:
         if tim_diff >= self.motion_primitive.time_range[self.motion_index]:
             self.motion_index += 1
             action = self.selected_motion_primitive[min(
-                self.motion_index, self.motion_primitive.num_segment - 1)]
-        return action
-
-    def __get_action(self):
-        '''
-        发送增量式的 action
-        '''
-        # 发送上个运动基元的指令后，才更新运动基元
-        if self.last_motion_primitive is None:
-            self.last_motion_primitive = self.selected_motion_primitive
-
-        if self.motion_index is None:
-            self.motion_index = 0
-        elif self.motion_index == self.motion_primitive.num_segment:
-            self.motion_index = 0
-            self.last_motion_primitive = self.selected_motion_primitive
-
-        # 仅在时间变动时发送 action， 否则 action_none
-        action = self.action_none
-        tim_diff = self.curr_t - self.last_solve_tsp_t
-        if tim_diff >= self.motion_primitive.time_range[self.motion_index]:
-            self.motion_index += 1
-            action = self.last_motion_primitive[min(
                 self.motion_index, self.motion_primitive.num_segment - 1)]
         return action

@@ -68,7 +68,8 @@ def run(drone=DEFAULT_DRONE,
     PHY = Physics.PYB
 
     #### Create the environment ################################
-    control_by_RL_mask = np.array([1] * num_drones).astype(bool)
+    control_by_RL_mask = np.zeros((num_drones, ))
+    control_by_RL_mask[0] = 1
     env = FlockingAviary(drone_model=drone,
                          num_drones=num_drones,
                          control_by_RL_mask=control_by_RL_mask,
@@ -78,6 +79,7 @@ def run(drone=DEFAULT_DRONE,
                          neighbourhood_radius=10,
                          pyb_freq=simulation_freq_hz,
                          ctrl_freq=control_freq_hz,
+                         flocking_freq_hz=flocking_freq_hz
                          gui=gui,
                          record=record_video,
                          obstacles=obstacles,
@@ -120,7 +122,7 @@ def run(drone=DEFAULT_DRONE,
         return flocking_command
 
     #### Run the simulation ####################################
-    action = np.zeros((num_drones, 4))  # 在 flocking_freq 时刻更新 action 即可
+    action = np.zeros((num_drones, 5))  # 在 flocking_freq 时刻更新 action 即可
     START = time.time()
 
     ##### main_loop ##########################################
@@ -139,7 +141,7 @@ def run(drone=DEFAULT_DRONE,
         for j in range(num_drones):
             logger.log(drone=j,
                        timestamp=i / env.CTRL_FREQ,
-                       state=obs[j],
+                       state=env.drone_states[j],
                        control=np.hstack([action[j, :3],
                                           np.zeros(9)]))
 

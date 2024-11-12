@@ -73,3 +73,36 @@ def in_fov(point, fov_vector):
                                                         fov_vector[1]) >= 0:
         return return_val
     return ~return_val
+
+
+def normalize_radians(angle):
+    angle = angle % (2 * np.pi)
+    if angle > np.pi:
+        angle -= 2 * np.pi
+    elif angle < -np.pi:
+        angle += 2 * np.pi
+    return angle
+
+
+def point_heading(point: np.ndarray):
+    point = point.squeeze()
+    angle = np.arctan2(point[1], point[0])
+    return normalize_radians(angle)
+
+
+def yaw_to_circle(yaw):
+    '''
+    将任意 yaw 角以单位圆上的点来表示
+    '''
+    yaw = np.array(yaw)
+    circle = np.array([np.sin(yaw), np.cos(yaw)])
+    return circle
+
+
+def circle_to_yaw(circile):
+    '''
+    将单位圆上任意点 circle 转换为 (-pi,pi] 内的 yaw 角
+    '''
+    circile = np.array(circile).reshape(-1, 2)
+    yaw = np.arctan2(circile[:, 1], circile[:, 0])
+    return yaw

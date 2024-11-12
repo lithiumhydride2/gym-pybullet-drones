@@ -32,6 +32,7 @@ class FlockingAviary(BaseRLAviary):
                  initial_rpys=None,
                  physics: Physics = Physics.PYB,
                  pyb_freq: int = 240,
+                 flocking_freq_hz: int = 10,
                  ctrl_freq: int = 240,
                  gui=False,
                  record=False,
@@ -96,6 +97,8 @@ class FlockingAviary(BaseRLAviary):
             ]
 
         #### reynolds #############
+        self.flocking_freq_hz = flocking_freq_hz
+        self.FLOCKING_PER_PYB = int(self.PYB_FREQ / self.flocking_freq_hz)
         self.use_reynolds = use_reynolds
         self.default_flight_height = default_flight_height
         if self.use_reynolds:
@@ -106,15 +109,16 @@ class FlockingAviary(BaseRLAviary):
 
         ### position estimation error level #####
         self.position_noise_std = [0.11, 0.16, 0.22, 0.31, 0.42, 0.50, 0.60]
-
         ### decision
         self.decisions = {}
         self.control_by_RL_mask = control_by_RL_mask
         for nth, mask in enumerate(control_by_RL_mask):
             if mask:
-                self.decisions[nth] = decision(nth_drone=nth,
+                self.decisions[nth] = decision(fov_range=self.fov_range,
+                                               nth_drone=nth,
                                                num_drone=num_drones,
-                                               planner="tsp")
+                                               planner="tsp",
+                                               enable_exploration=True)
 
         ######### finally, super.__init__()
         super().__init__(drone_model=drone_model,
@@ -135,9 +139,14 @@ class FlockingAviary(BaseRLAviary):
         #### Set a limit on the maximum target speed ###############
         if self.ACT_TYPE == ActionType.YAW:
             self.SPEED_LIMIT = 0.6  # m/s
+
         ######### decision freq
         self.DECISION_FREQ = 5
         self.DECISION_PER_PYB = int(self.PYB_FREQ / self.DECISION_FREQ)
+
+        ######### for _preprocessAction
+        self.target_vs = np.zeros((self.NUM_DRONES, 4))
+        self.target_yaws = np.zeros((self.NUM_DRONES, 1))
 
     ################################################################################
 
@@ -147,16 +156,19 @@ class FlockingAviary(BaseRLAviary):
         Returns
         -------
         spaces.Box
-            An ndarray of shape (NUM_DRONES, 1) for the commanded yaw action vectors.
+            An ndarray of shape (NUM_DRONES, 2) for the commanded yaw action vectors.
+            yaw_action here is 由单位圆上的点表示
         Note
             原项目并不兼容仅部分无人机被RL控制的算法，这里兼容仅部分无人机受RL控制
         """
         #### Action vector ######### X       Y       Z   fract. of MAX_SPEED_KMH
         if self.ACT_TYPE == ActionType.YAW:
-            act_lower_bound = np.array(
-                [-1 for mask in self.control_by_RL_mask if mask])
+            act_lower_bound = np.array([
+                -1.0 * np.ones((2, )) for mask in self.control_by_RL_mask
+                if mask
+            ])
             act_upper_bound = np.array(
-                [1 for mask in self.control_by_RL_mask if mask])
+                [np.ones((2, )) for mask in self.control_by_RL_mask if mask])
         else:
             print("[ERROR] in FlockingAviary._actionspace()")
         return spaces.Box(low=act_lower_bound,
@@ -193,18 +205,18 @@ class FlockingAviary(BaseRLAviary):
         Return the current observation of the environment.
         ## Description:
             self.drone_poses 在此处得到更新
+            self.detection_map 在此处得到更新, 由于 detection 包含随机数，因此每次循环仅更新一次
         '''
         self.drone_states = self._computeDroneState()
         # step_counter 对pyb freq 进行计数
 
         self.decisions: dict[int, decision]
-
+        obs = []
         if self.OBS_TYPE == ObservationType.GAUSSIAN:
             ############ obs type in gaussian
             if self.step_counter % self.DECISION_PER_PYB == 0:
                 adjacency_Mat = self._computeAdjacencyMatFOV()
                 # 由 detection step 获得观测
-                obs = []
                 relative_position = self._relative_position
                 for nth, mask in enumerate(self.control_by_RL_mask):
                     if mask:
@@ -216,6 +228,7 @@ class FlockingAviary(BaseRLAviary):
                             fov_vector=self._computeFovVector(nth),
                             relative_pose=relative_position[nth])
                         obs.append(obs_nth)
+        return np.asarray(obs)
 
     ################################################################################
     @property
@@ -226,7 +239,19 @@ class FlockingAviary(BaseRLAviary):
             for other in range(self.NUM_DRONES)
         ] for ego in range(self.NUM_DRONES)])
 
-    def get_command_reynolds(self, smooth_factor=0.3):
+    def _computeYawCommand(self, obs):
+        '''
+        Description:
+            修改 decision 的范式，使用 obs 计算 yaw heading 控制指令
+        Return:
+            yaw_command in shape of (self.num_drones, )
+        '''
+        yaw_command = np.zeros((self.NUM_DRONES, ))
+        for nth, mask in enumerate(self.control_by_RL_mask):
+            if mask:
+                yaw_command[nth] = self.decisions[nth].DecisionStep(obs)
+
+    def _get_command_reynolds(self, smooth_factor=0.3):
         '''
         Args
             neighbors: 用来表示无人机间邻居/观测关系
@@ -275,11 +300,8 @@ class FlockingAviary(BaseRLAviary):
         assert reynolds_commands.shape == (self.NUM_DRONES, 3)
         return reynolds_commands
 
-    def get_command_migration(self):
+    def _get_command_migration(self):
         '''
-        Args:
-            neighbors: 无人机间的邻接关系
-            waypoints: 从 yaml 文件中读取的所有 waypoints
         '''
 
         drone_poses = self.drone_states[:, 0:3]
@@ -321,8 +343,11 @@ class FlockingAviary(BaseRLAviary):
         '''
         在考虑 fov 的情况下, 计算无人机间观测邻接矩阵
         '''
+        # mat = np.ones((self.NUM_DRONES, self.NUM_DRONES))
+        # np.fill_diagonal(mat, 0)
+        # return mat
         mat = np.array([
-            self._computeFovMask(nth_drone)
+            self._computeFovMaskOcclusion(nth_drone)
             for nth_drone in range(self.NUM_DRONES)
         ])
         return mat
@@ -330,6 +355,7 @@ class FlockingAviary(BaseRLAviary):
     ################################################################################
 
     def _computeFovVector(self, nth_drone):
+
         ego_heading = self._computeHeading(nth_drone)
         fov_vector = np.array([
             np.dot(
@@ -338,6 +364,37 @@ class FlockingAviary(BaseRLAviary):
                 ego_heading) for theta in self.fov_range
         ])
         return fov_vector
+
+    def _computeFovMaskOcclusion(self, nth_drone):
+        '''
+        判断 nth_drone 的 FOV 之内有哪些无人机，且考虑遮挡关系
+        '''
+
+        def visable(start, target, obstacles):
+            '''
+            target 是否被 obstacles 中任意点遮挡
+            '''
+            line_vec = target - start
+            line_length = np.linalg.norm(line_vec)
+            for obs in obstacles:
+                obs_vec = obs - start
+                if np.cross(line_vec, obs_vec) == 0:
+                    proj_length = np.dot(obs_vec, line_vec) / line_length
+                    if 0 < proj_length < line_length:
+                        return False
+            return True
+
+        mask = self._computeFovMask(nth_drone)
+        for index, pos in enumerate(mask.astype(bool)):
+            if pos:
+                mask_copy = mask
+                mask_copy[index] = 0
+                mask[index] = visable(
+                    self.drone_states[nth_drone, 0:2], self.drone_states[index,
+                                                                         0:2],
+                    self.drone_states[mask_copy.astype(bool), 0:2])
+
+        return mask
 
     def _computeFovMask(self, nth_drone):
         '''
@@ -377,13 +434,14 @@ class FlockingAviary(BaseRLAviary):
         使用 PID 控制将 action 转化为 RPM, yaw_action 后续也应该从此处产生 
 
         Pre-processes the action passed to `.step()` into motors' RPMs.
-
-        Uses PID control to target a desired velocity vector.
+        Descriptions:
+            此处嵌套了 reynolds 用来计算高层速度控制指令
+        
 
         Parameters
         ----------
         action : ndarray
-            The desired velocity input for each drone, to be translated into RPMs.
+            The desired target_yaw [px, py, pz, factor_v, target_yaw], to be translated into RPMs.
 
         Returns
         -------
@@ -393,10 +451,37 @@ class FlockingAviary(BaseRLAviary):
 
         """
         rpm = np.zeros((self.NUM_DRONES, 4))
-        for k in range(action.shape[0]):
+
+        if self.step_counter % self.FLOCKING_PER_PYB == 0:
+            #### 更新 flocking 控制指令
+            flocking_command = self._get_command_migration(
+            ) + self._get_command_reynolds()
+            command_norm = np.linalg.norm(flocking_command,
+                                          axis=1,
+                                          keepdims=True)
+            flocking_command = flocking_command / command_norm
+            self.target_vs = np.hstack(flocking_command,
+                                       np.min(
+                                           (np.ones(command_norm.shape),
+                                            command_norm / self.SPEED_LIMIT),
+                                           axis=0))  # 将最大速度限制在 speed_limit
+
+        # yaws
+        self.target_yaws = action
+        return self._computeRpmFromCommand(self.target_vs, self.target_yaws)
+
+    def _computeRpmFromCommand(self, target_vs, target_yaws):
+        '''
+        Args:
+            target_vs: in shape (num_drones,4)
+            target_yaws: in shape (num_drones,1)
+        '''
+        rpm = np.zeros((self.NUM_DRONES, 4))
+        for k in range(self.NUM_DRONES):
             #### Get the current state of the drone  ###################
             state = self._getDroneStateVector(k)
-            target_v = action[k, :]
+            target_v = target_vs[k]
+            target_yaw = target_yaws[k]
             #### Normalize the first 3 components of the target velocity
             if np.linalg.norm(target_v[0:3]) != 0:
                 v_unit_vector = target_v[0:3] / np.linalg.norm(target_v[0:3])
@@ -413,7 +498,7 @@ class FlockingAviary(BaseRLAviary):
                 cur_vel=state[10:13],
                 cur_ang_vel=state[13:16],
                 target_pos=target_pos,  # same as the current position
-                target_rpy=np.array([0, 0, state[9]]),  # keep current yaw
+                target_rpy=np.array([0, 0, target_yaw]),  # 接收 target_yaw控制指令
                 target_vel=self.SPEED_LIMIT * np.abs(target_v[3]) *
                 v_unit_vector  # target the desired velocity vector
             )
