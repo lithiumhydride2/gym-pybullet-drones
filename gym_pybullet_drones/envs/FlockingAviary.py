@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from gymnasium import spaces
+from functools import lru_cache
 from gym_pybullet_drones.envs.BaseAviary import BaseAviary
 from gym_pybullet_drones.envs.BaseRLAviary import BaseRLAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, FOVType, ActionType, ObservationType
@@ -95,30 +96,10 @@ class FlockingAviary(BaseRLAviary):
                               )  # 此处 vswarm_quad 是套壳的 cf2x ，因此使用 cf2x 的控制方法
                 for i in range(num_drones)
             ]
-
-        #### reynolds #############
-        self.flocking_freq_hz = flocking_freq_hz
-        self.FLOCKING_PER_PYB = int(self.PYB_FREQ / self.flocking_freq_hz)
-        self.use_reynolds = use_reynolds
-        self.default_flight_height = default_flight_height
-        if self.use_reynolds:
-            self.reynolds = Reynolds()
-        self.last_reynolds_command = None
-
-        self.fov_range = fov_config.value
+        self.control_by_RL_mask = control_by_RL_mask
 
         ### position estimation error level #####
         self.position_noise_std = [0.11, 0.16, 0.22, 0.31, 0.42, 0.50, 0.60]
-        ### decision
-        self.decisions = {}
-        self.control_by_RL_mask = control_by_RL_mask
-        for nth, mask in enumerate(control_by_RL_mask):
-            if mask:
-                self.decisions[nth] = decision(fov_range=self.fov_range,
-                                               nth_drone=nth,
-                                               num_drone=num_drones,
-                                               planner="tsp",
-                                               enable_exploration=True)
 
         ######### finally, super.__init__()
         super().__init__(drone_model=drone_model,
@@ -140,13 +121,34 @@ class FlockingAviary(BaseRLAviary):
         if self.ACT_TYPE == ActionType.YAW:
             self.SPEED_LIMIT = 0.6  # m/s
 
-        ######### decision freq
+        #### reynolds #############
+        self.flocking_freq_hz = flocking_freq_hz
+        self.FLOCKING_PER_PYB = int(self.PYB_FREQ / self.flocking_freq_hz)
+        self.use_reynolds = use_reynolds
+        self.default_flight_height = default_flight_height
+        if self.use_reynolds:
+            self.reynolds = Reynolds()
+        self.last_reynolds_command = None
+        self.fov_range = fov_config.value
+
+        ### decision
+        self.decisions = {}
+        for nth, mask in enumerate(control_by_RL_mask):
+            if mask:
+                self.decisions[nth] = decision(fov_range=self.fov_range,
+                                               nth_drone=nth,
+                                               num_drone=num_drones,
+                                               planner="tsp",
+                                               enable_exploration=True)
         self.DECISION_FREQ = 5
         self.DECISION_PER_PYB = int(self.PYB_FREQ / self.DECISION_FREQ)
 
         ######### for _preprocessAction
         self.target_vs = np.zeros((self.NUM_DRONES, 4))
-        self.target_yaws = np.zeros((self.NUM_DRONES, 1))
+        self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
+
+        ### cache
+        self.last_obs = None
 
     ################################################################################
 
@@ -207,49 +209,48 @@ class FlockingAviary(BaseRLAviary):
             self.drone_poses 在此处得到更新
             self.detection_map 在此处得到更新, 由于 detection 包含随机数，因此每次循环仅更新一次
         '''
-        self.drone_states = self._computeDroneState()
+        # self.drone_states = self._computeDroneState()
         # step_counter 对pyb freq 进行计数
 
         self.decisions: dict[int, decision]
-        obs = []
+
         if self.OBS_TYPE == ObservationType.GAUSSIAN:
             ############ obs type in gaussian
             if self.step_counter % self.DECISION_PER_PYB == 0:
+                obs = []
                 adjacency_Mat = self._computeAdjacencyMatFOV()
                 # 由 detection step 获得观测
                 relative_position = self._relative_position
                 for nth, mask in enumerate(self.control_by_RL_mask):
                     if mask:
+                        other_pose_mask = np.ones((self.NUM_DRONES, ))
+                        other_pose_mask[nth] = .0
                         obs_nth = self.decisions[nth].step(
                             curr_time=self.step_counter * self.PYB_TIMESTEP,
                             detection_map=self._computePositionEstimation(
                                 adjacency_Mat, nth),
-                            ego_heading=self._computeHeading(nth),
+                            ego_heading=circle_to_yaw(
+                                self._computeHeading(nth)[:2]),
                             fov_vector=self._computeFovVector(nth),
-                            relative_pose=relative_position[nth])
+                            relative_pose=relative_position[nth][
+                                other_pose_mask.astype(bool)])
                         obs.append(obs_nth)
-        return np.asarray(obs)
+
+                self.last_obs = obs  # 这样做是由于 obs 在 step_counter == 0 可以初始化
+
+        return np.asarray(self.last_obs)
 
     ################################################################################
     @property
     def _relative_position(self):
+        '''
+        其中包含了相对自身的位置 [0,0], 需处理
+        '''
         drone_poses = self.drone_states[:, 0:3]
         return np.array([[
             drone_poses[other, :2] - drone_poses[ego, :2]
             for other in range(self.NUM_DRONES)
         ] for ego in range(self.NUM_DRONES)])
-
-    def _computeYawCommand(self, obs):
-        '''
-        Description:
-            修改 decision 的范式，使用 obs 计算 yaw heading 控制指令
-        Return:
-            yaw_command in shape of (self.num_drones, )
-        '''
-        yaw_command = np.zeros((self.NUM_DRONES, ))
-        for nth, mask in enumerate(self.control_by_RL_mask):
-            if mask:
-                yaw_command[nth] = self.decisions[nth].DecisionStep(obs)
 
     def _get_command_reynolds(self, smooth_factor=0.3):
         '''
@@ -411,6 +412,23 @@ class FlockingAviary(BaseRLAviary):
 
         return mask
 
+    def computeYawActionTSP(self, obs):
+        '''
+        使用基本的 tsp base line 计算 yaw command
+        '''
+        return self.target_yaw_circle
+        if self.step_counter % self.DECISION_PER_PYB == 0:
+            target_yaws = np.zeros((self.NUM_DRONES, ))
+            obs_index = 0
+            for nth, mask in enumerate(self.control_by_RL_mask):
+                if mask:
+                    target_yaws[nth] = self.decisions[nth].DecisionStep(
+                        obs[obs_index])
+                    obs_index += 1
+            self.target_yaw_circle = yaw_to_circle(target_yaws)
+        # if not, return last decision
+        return self.target_yaw_circle
+
     def _computeDroneState(self):
         """
         此处的 obs 是针对于环境的 obs,计算 reynolds 是针对于 每个无人机个体的 obs
@@ -450,8 +468,7 @@ class FlockingAviary(BaseRLAviary):
             commanded to the 4 motors of each drone.
 
         """
-        rpm = np.zeros((self.NUM_DRONES, 4))
-
+        self.drone_states = self._computeDroneState()
         if self.step_counter % self.FLOCKING_PER_PYB == 0:
             #### 更新 flocking 控制指令
             flocking_command = self._get_command_migration(
@@ -460,15 +477,14 @@ class FlockingAviary(BaseRLAviary):
                                           axis=1,
                                           keepdims=True)
             flocking_command = flocking_command / command_norm
-            self.target_vs = np.hstack(flocking_command,
-                                       np.min(
-                                           (np.ones(command_norm.shape),
-                                            command_norm / self.SPEED_LIMIT),
-                                           axis=0))  # 将最大速度限制在 speed_limit
+            self.target_vs = np.hstack(
+                (flocking_command,
+                 np.min((np.ones(
+                     command_norm.shape), command_norm / self.SPEED_LIMIT),
+                        axis=0)))  # 将最大速度限制在 speed_limit
 
-        # yaws
-        self.target_yaws = action
-        return self._computeRpmFromCommand(self.target_vs, self.target_yaws)
+        target_yaws = circle_to_yaw(action)
+        return self._computeRpmFromCommand(self.target_vs, target_yaws)
 
     def _computeRpmFromCommand(self, target_vs, target_yaws):
         '''

@@ -68,8 +68,8 @@ def run(drone=DEFAULT_DRONE,
     PHY = Physics.PYB
 
     #### Create the environment ################################
-    control_by_RL_mask = np.zeros((num_drones, ))
-    control_by_RL_mask[0] = 1
+    control_by_RL_mask = np.ones((num_drones, ))
+    # control_by_RL_mask[0] = 1
     env = FlockingAviary(drone_model=drone,
                          num_drones=num_drones,
                          control_by_RL_mask=control_by_RL_mask,
@@ -79,7 +79,7 @@ def run(drone=DEFAULT_DRONE,
                          neighbourhood_radius=10,
                          pyb_freq=simulation_freq_hz,
                          ctrl_freq=control_freq_hz,
-                         flocking_freq_hz=flocking_freq_hz
+                         flocking_freq_hz=flocking_freq_hz,
                          gui=gui,
                          record=record_video,
                          obstacles=obstacles,
@@ -100,29 +100,8 @@ def run(drone=DEFAULT_DRONE,
                     output_folder=output_folder,
                     colab=colab)
 
-    #### 更新 flocking 控制指令 ##################################
-
-    def flocking_update(step, action, neighbors: dict[set] = None):
-        # 例如 40hz / 10hz , 则每4step, flocking 更新一次
-        if step % int(round(env.CTRL_FREQ / flocking_freq_hz)) != 0:
-            return action
-
-        reynolds_command = env.get_command_reynolds()
-        migration_command = env.get_command_migration()
-
-        flocking_command = reynolds_command + migration_command
-        # 将 command 转化为 action space 内， X Y Z
-        command_norm = np.linalg.norm(flocking_command, axis=1, keepdims=True)
-        flocking_command = flocking_command / command_norm
-        flocking_command = np.hstack(
-            (flocking_command,
-             np.min(
-                 (np.ones(command_norm.shape), command_norm / env.SPEED_LIMIT),
-                 axis=0)))  # 将最大速度限制在 speed_limit
-        return flocking_command
-
     #### Run the simulation ####################################
-    action = np.zeros((num_drones, 5))  # 在 flocking_freq 时刻更新 action 即可
+    action = np.zeros((num_drones, 2))  # 在 flocking_freq 时刻更新 action 即可
     START = time.time()
 
     ##### main_loop ##########################################
@@ -134,15 +113,15 @@ def run(drone=DEFAULT_DRONE,
         #### Step the simulation ###################################
         obs, reward, terminated, truncated, info = env.step(action)
 
-        #### Compute the current flocking commands#############
-        action = flocking_update(i, action)
+        #### Compute the current action#############
+        action = env.computeYawActionTSP(obs)
 
         #### Log the simulation ####################################
         for j in range(num_drones):
             logger.log(drone=j,
                        timestamp=i / env.CTRL_FREQ,
                        state=env.drone_states[j],
-                       control=np.hstack([action[j, :3],
+                       control=np.hstack([env.target_vs[j, :3],
                                           np.zeros(9)]))
 
         #### Printout ##############################################

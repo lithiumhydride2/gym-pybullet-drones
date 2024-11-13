@@ -270,7 +270,7 @@ class UAVGaussian():
         #         high_info_idx=np.array([[]] * self.num_latent_target),
         #         std_at_grid=all_std)
         #     self.metrics_obj.step(jsd=JS, unc=UNC, fovunc=FOV_UNC)
-        return action
+        return self.last_yaw_action
 
     def save_animation(self, **kwargs):
         """

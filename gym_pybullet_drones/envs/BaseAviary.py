@@ -661,7 +661,7 @@ class BaseAviary(gym.Env):
 
     def _computeHeading(self, nth_drone):
         '''
-            计算无人机世界坐标系下的偏航角， 将四元数转化为相对世界坐标系的旋转
+            计算无人机世界坐标系下的偏航角，以单位圆上点的形式， 将四元数转化为相对世界坐标系的旋转
         '''
         rot_mat = np.array(p.getMatrixFromQuaternion(
             self.quat[nth_drone, :])).reshape(3, 3)

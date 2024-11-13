@@ -103,7 +103,7 @@ class TSPBaseLine:
         # 更新 self.observed_target
         if self.need_replanning(gp_wrapper) or self.motion_index is None \
             or self.motion_index == self.motion_primitive.num_segment:
-            self.__update_detection(gp_wrapper, detection_map)
+            self.__update_detection(gp_wrapper)
             self.last_solve_tsp_t = self.curr_t
             self.last_solve_tsp_observed_target = self.observed_target
             keys_to_visit = self.__update_tsp_problem()
@@ -260,6 +260,9 @@ class TSPBaseLine:
             return np.argmin(reward)
 
     def __get_action_no_wait(self):
+        '''
+        以 yaw (rad) 的形式返回 action
+        '''
         if self.motion_index is None:
             self.motion_index = 0
         elif self.motion_index == self.motion_primitive.num_segment:
