@@ -6,3 +6,12 @@
 # Second Step
 
 - 此处需要实现关于 无人机偏航角的 实现.
+
+# drone states
+```python
+state = np.hstack([
+            self.pos[nth_drone, :], self.quat[nth_drone, :], # 3,4
+            self.rpy[nth_drone, :], self.vel[nth_drone, :],  # 3,3
+            self.ang_v[nth_drone, :], self.last_clipped_action[nth_drone, :]
+        ])
+```

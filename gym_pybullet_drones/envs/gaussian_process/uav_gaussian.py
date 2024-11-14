@@ -225,7 +225,7 @@ class UAVGaussian():
         -----
         Args:
             curr_time: ros传入的当前时刻
-            detection_map: key: nth_drone value: position estimation
+            detection_map: key: nth_drone value: position estimation, 需要坐标系下直接计算的 相对位置
             ego_heading: 无人机当前 yaw 角， 世界坐标系下
             fov_vector: 无人机当前 fov, 由两向量组成，世界坐标系下
             relative_pose: 其他无人机的真实位置

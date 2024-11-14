@@ -62,17 +62,17 @@ def run(drone=DEFAULT_DRONE,
         default_flight_height=DEFAULT_FLIGHT_HEIGHT,
         colab=DEFAULT_COLAB):
     #### Initialize the simulation #############################
-    INIT_XYZS = np.array([[x * 1, .0, DEFAULT_FLIGHT_HEIGHT]
+    INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(num_drones)])  # 横一字排列
     INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
     PHY = Physics.PYB
 
     #### Create the environment ################################
-    control_by_RL_mask = np.ones((num_drones, ))
-    # control_by_RL_mask[0] = 1
+    control_by_RL_mask = np.zeros((num_drones, ))
+    control_by_RL_mask[0] = 1
     env = FlockingAviary(drone_model=drone,
                          num_drones=num_drones,
-                         control_by_RL_mask=control_by_RL_mask,
+                         control_by_RL_mask=control_by_RL_mask.astype(bool),
                          initial_xyzs=INIT_XYZS,
                          initial_rpys=INIT_RPYS,
                          physics=Physics.PYB,

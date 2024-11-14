@@ -55,7 +55,7 @@ class FlockingAviary(BaseRLAviary):
         num_drones : int, optional
             The desired number of drones in the aviary.
         control_by_RL_mask: np.ndarray:
-            in shape(num_drones,).astype(bool), 表示哪些无人机受到 decision 控制
+            in shape(num_drones,).astype(bool), 表示哪些无人机受到 decision 控制, 不受到 decision 控制的无人机具有超能力！
         neighbourhood_radius : float, optional
             Radius used to compute the drones' adjacency matrix, in meters.
         initial_xyzs: ndarray | None, optional
@@ -272,21 +272,24 @@ class FlockingAviary(BaseRLAviary):
         # 计算 观测 邻接矩阵
         self.adjacencyMat = self._computeAdjacencyMatFOV()
 
-        #### 对于由 decision 控制的无人机，计算其相对位置估计
-        relative_position_observation = {}
-        for nth_drone, mask in enumerate(self.control_by_RL_mask):
-            if mask:
-                relative_position_observation[
-                    nth_drone] = self._computePositionEstimation(
-                        self.adjacencyMat, nth_drone)
-
         #根据相对位置与 adjacencyMat 计算 reynolds 控制指令
-        reynolds_commands = np.array([
-            self.reynolds.command(
-                relative_position[i][self.adjacencyMat[i].astype(bool)],
-                relative_velocities[i][self.adjacencyMat[i].astype(bool)])
-            for i in range(self.NUM_DRONES)
-        ])
+        reynolds_commands = []
+        super_power_adj_mat = np.ones((self.NUM_DRONES, self.NUM_DRONES))
+        np.fill_diagonal(super_power_adj_mat, 0)
+        for i in range(self.NUM_DRONES):
+            if self.control_by_RL_mask[i]:
+                reynolds_commands.append(
+                    self.reynolds.command(relative_position[i][
+                        self.adjacencyMat[i].astype(bool)]))
+                # 这里考虑替换 带噪声的 位置估计
+            else:
+                reynolds_commands.append(
+                    self.reynolds.command(
+                        relative_position[i][super_power_adj_mat[i].astype(
+                            bool)], relative_velocities[i][
+                                super_power_adj_mat[i].astype(bool)]))
+                # 如果不需要超能力 relative_position[i][self.adjacencyMat[i].astype(bool)]
+        reynolds_commands = np.array(reynolds_commands)
 
         if self.last_reynolds_command is None:
             self.last_reynolds_command = reynolds_commands
@@ -416,7 +419,8 @@ class FlockingAviary(BaseRLAviary):
         '''
         使用基本的 tsp base line 计算 yaw command
         '''
-        return self.target_yaw_circle
+        # no action
+        # return self.target_yaw_circle
         if self.step_counter % self.DECISION_PER_PYB == 0:
             target_yaws = np.zeros((self.NUM_DRONES, ))
             obs_index = 0
@@ -454,7 +458,7 @@ class FlockingAviary(BaseRLAviary):
         Pre-processes the action passed to `.step()` into motors' RPMs.
         Descriptions:
             此处嵌套了 reynolds 用来计算高层速度控制指令
-        
+            self.drone_states 在此处得到更新
 
         Parameters
         ----------
@@ -469,6 +473,7 @@ class FlockingAviary(BaseRLAviary):
 
         """
         self.drone_states = self._computeDroneState()
+
         if self.step_counter % self.FLOCKING_PER_PYB == 0:
             #### 更新 flocking 控制指令
             flocking_command = self._get_command_migration(

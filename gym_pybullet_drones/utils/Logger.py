@@ -124,6 +124,7 @@ class Logger(object):
         #### Log the information and increase the counter ##########
         self.timestamps[drone, current_counter] = timestamp
         #### Re-order the kinematic obs (of most Aviaries) #########
+        # TODO(logger 中的 state 定义与外界不同 )
         self.states[drone, :, current_counter] = np.hstack(
             [state[0:3], state[10:13], state[7:10], state[13:20]])
         self.controls[drone, :, current_counter] = control
@@ -287,13 +288,37 @@ class Logger(object):
                            delimiter=",")
 
     ################################################################################
+    def plot_yaw(self):
+        '''
+        绘制每个无人机的 yaw 角
+        '''
+        plt.close("all")
+        self.__set_plot()
+        cmap = plt.get_cmap("Set1").colors
+        fig, axes = plt.subplots(self.NUM_DRONES,
+                                 1,
+                                 figsize=(5, 1 * self.NUM_DRONES),
+                                 sharex="all")
+        yaw = self.states[:, 8, :]  # 记录 yaw
+        t = self.get_time
+        for index, ax in enumerate(axes):
+            ax.plot(t,
+                    yaw[index],
+                    label="UAV{} yaw".format(index + 1),
+                    color=cmap[index])
+            if index == self.NUM_DRONES - 1:
+                ax.set_xlabel("time/(s)")
+            ax.set_xlim([0, self.timestamps.shape[1] / self.LOGGING_FREQ_HZ])
+            ax.set_ylim([-np.pi, np.pi])
+            ax.set_yticks([-np.pi, 0, np.pi], ["$-\pi$", "0", " $\pi$"])
+        fig.savefig(fname=self.save_templete.format("yaw", dpi=600))
+
     def plot_traj(self):
         ### 这里所有的数据都是以 npy 格式存储的， 若想要进行绘制， 应当对原有代码作适当转换
         plt.close("all")
         self.__set_plot()
         cmap = plt.get_cmap("Set1").colors
         fig, ax = plt.subplots(figsize=[5, 5])
-
         poses = self.states[:, 0:3, :]  # x y z
         for index, pose in enumerate(poses):
             # 绘制起点
@@ -323,6 +348,12 @@ class Logger(object):
 
         ################ 绘制其他 ####################
         self.plotDistance()
+        self.plot_yaw()
+
+    @property
+    def get_time(self):
+        return np.arange(0, self.timestamps.shape[1] / self.LOGGING_FREQ_HZ,
+                         1 / self.LOGGING_FREQ_HZ)
 
     def plotDistance(self):
         poses = self.states[:, 0:3, :]
@@ -342,8 +373,7 @@ class Logger(object):
         distance_min = np.min(distance, axis=0)
         distance_std = np.std(distance, axis=0)
 
-        t = np.arange(0, self.timestamps.shape[1] / self.LOGGING_FREQ_HZ,
-                      1 / self.LOGGING_FREQ_HZ)
+        t = self.get_time
         # 这段复制
         fig, ax = plt.subplots(1, 1, figsize=(5, 2))
         ax.set_xlabel("Time (s)")
