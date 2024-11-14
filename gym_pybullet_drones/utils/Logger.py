@@ -339,7 +339,8 @@ class Logger(object):
         time_str = time.strftime("%Y%m%d-%H%M")
 
         self.save_templete = os.path.join(pkg_path, self.OUTPUT_FOLDER,
-                                          "{}" + f"_{time_str}.png")
+                                          time_str, "{}" + f"_{time_str}.png")
+        os.makedirs(os.path.dirname(self.save_templete))
         try:
             fig.savefig(fname=self.save_templete.format("traj"), dpi=600)
         except Exception as e:

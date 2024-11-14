@@ -227,7 +227,8 @@ class TSPBaseLine:
         2. 对于每个运动基元，估计应用该基元后的 unc
         '''
         if not self.kEnableExploartion:
-            return np.random.randint(self.motion_primitive.num_primitive)
+            return self.motion_primitive.num_primitive - 1  # 返回最大偏差
+            # return np.random.randint(self.motion_primitive.num_primitive)
         try:
             curr_neg_unc_list, curr_neg_unc = gp_wrapper.eval_unc_with_grid(
                 std_at_grid=self.std_at_grid)  # 返回一个 list

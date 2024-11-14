@@ -41,15 +41,16 @@ DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = False
 DEFAULT_SIMULATION_FREQ_HZ = 240
 DEFAULT_CONTROL_FREQ_HZ = 48
-DEFAULT_DURATION_SEC = 40
+DEFAULT_DURATION_SEC = 100
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
+DEFAULT_NUM_DRONE = 3
 
 
 def run(drone=DEFAULT_DRONE,
         gui=DEFAULT_GUI,
-        num_drones=4,
+        num_drones=DEFAULT_NUM_DRONE,
         record_video=DEFAULT_RECORD_VIDEO,
         plot=DEFAULT_PLOT,
         user_debug_gui=DEFAULT_USER_DEBUG_GUI,
@@ -68,8 +69,8 @@ def run(drone=DEFAULT_DRONE,
     PHY = Physics.PYB
 
     #### Create the environment ################################
-    control_by_RL_mask = np.zeros((num_drones, ))
-    control_by_RL_mask[0] = 1
+    control_by_RL_mask = np.ones((num_drones, ))
+    # control_by_RL_mask[0] = 1
     env = FlockingAviary(drone_model=drone,
                          num_drones=num_drones,
                          control_by_RL_mask=control_by_RL_mask.astype(bool),
@@ -114,7 +115,7 @@ def run(drone=DEFAULT_DRONE,
         obs, reward, terminated, truncated, info = env.step(action)
 
         #### Compute the current action#############
-        action = env.computeYawActionTSP(obs)
+        # action = env.computeYawActionTSP(obs)
 
         #### Log the simulation ####################################
         for j in range(num_drones):
@@ -152,7 +153,7 @@ if __name__ == "__main__":
                         metavar='',
                         choices=DroneModel)
     parser.add_argument('--num_drones',
-                        default=6,
+                        default=DEFAULT_NUM_DRONE,
                         type=int,
                         help="Num of drones (default: 6)")
 

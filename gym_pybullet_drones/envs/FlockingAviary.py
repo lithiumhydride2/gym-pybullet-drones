@@ -139,16 +139,22 @@ class FlockingAviary(BaseRLAviary):
                                                nth_drone=nth,
                                                num_drone=num_drones,
                                                planner="tsp",
-                                               enable_exploration=True)
+                                               enable_exploration=False)
         self.DECISION_FREQ = 5
         self.DECISION_PER_PYB = int(self.PYB_FREQ / self.DECISION_FREQ)
 
         ######### for _preprocessAction
         self.target_vs = np.zeros((self.NUM_DRONES, 4))
         self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
+        self.target_yaw = np.zeros(
+            (self.NUM_DRONES, ))  # 将 yaw action 累加到 self.target_yaw 之上
 
         ### cache
         self.last_obs = None
+
+        ### hyper param
+        self.VISABLE_DEGREE_THERSHOLD = 5  # in degree
+        self.VISABLE_FAIL_DETECT = 0.05  # 5% 的概率无法检出目标
 
     ################################################################################
 
@@ -382,21 +388,32 @@ class FlockingAviary(BaseRLAviary):
             line_length = np.linalg.norm(line_vec)
             for obs in obstacles:
                 obs_vec = obs - start
-                if np.cross(line_vec, obs_vec) == 0:
+                # 这里使用 arccos 计算两个向量之间的夹角
+                angle = np.rad2deg(
+                    np.arccos(
+                        np.clip(
+                            np.dot(line_vec, obs_vec) /
+                            (np.linalg.norm(line_vec) *
+                             np.linalg.norm(obs_vec)), -1.0, 1.0)))
+
+                if np.abs(angle) < self.VISABLE_DEGREE_THERSHOLD:
                     proj_length = np.dot(obs_vec, line_vec) / line_length
                     if 0 < proj_length < line_length:
                         return False
-            return True
+            return np.random.random(
+            ) > self.VISABLE_FAIL_DETECT  # 90% 的概率能够检出目标
 
         mask = self._computeFovMask(nth_drone)
+
         for index, pos in enumerate(mask.astype(bool)):
             if pos:
-                mask_copy = mask
-                mask_copy[index] = 0
+                mask_temp = mask
+                mask_temp[index] = 0
+                # 此处判断 target 是否被任意 obstacles 遮挡
                 mask[index] = visable(
                     self.drone_states[nth_drone, 0:2], self.drone_states[index,
                                                                          0:2],
-                    self.drone_states[mask_copy.astype(bool), 0:2])
+                    self.drone_states[mask_temp.astype(bool), 0:2])
 
         return mask
 
@@ -422,14 +439,15 @@ class FlockingAviary(BaseRLAviary):
         # no action
         # return self.target_yaw_circle
         if self.step_counter % self.DECISION_PER_PYB == 0:
-            target_yaws = np.zeros((self.NUM_DRONES, ))
+            yaw_action = np.zeros((self.NUM_DRONES, ))
             obs_index = 0
             for nth, mask in enumerate(self.control_by_RL_mask):
                 if mask:
-                    target_yaws[nth] = self.decisions[nth].DecisionStep(
+                    yaw_action[nth] = self.decisions[nth].DecisionStep(
                         obs[obs_index])
                     obs_index += 1
-            self.target_yaw_circle = yaw_to_circle(target_yaws)
+            self.target_yaw = self.target_yaw + yaw_action
+            self.target_yaw_circle = yaw_to_circle(self.target_yaw)
         # if not, return last decision
         return self.target_yaw_circle
 
