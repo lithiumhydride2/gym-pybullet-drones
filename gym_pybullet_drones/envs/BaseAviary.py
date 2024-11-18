@@ -292,8 +292,10 @@ class BaseAviary(gym.Env):
 
     ################################################################################
 
-    def step(self, action):
+    def step(self, action, need_return=True):
         """Advances the environment by one simulation step.
+        
+        step(action) 被以 ctrl 的频率调用
 
         Parameters
         ----------
@@ -420,15 +422,18 @@ class BaseAviary(gym.Env):
             self.last_clipped_action = clipped_action
         #### Update and store the drones kinematic information #####
         self._updateAndStoreKinematicInformation()
-        #### Prepare the return values #############################
-        obs = self._computeObs()
-        reward = self._computeReward()
-        terminated = self._computeTerminated()
-        truncated = self._computeTruncated()
-        info = self._computeInfo()
         #### Advance the step counter ##############################
         self.step_counter = self.step_counter + (1 * self.PYB_STEPS_PER_CTRL)
-        return obs, reward, terminated, truncated, info
+        #### Prepare the return values #############################
+        if need_return:
+            obs = self._computeObs()
+            reward = self._computeReward()
+            terminated = self._computeTerminated()
+            truncated = self._computeTruncated()
+            info = self._computeInfo()
+            return obs, reward, terminated, truncated, info
+        else:
+            return {}, {}, {}, {}, {}
 
     ################################################################################
 

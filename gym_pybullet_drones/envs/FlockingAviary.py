@@ -34,6 +34,7 @@ class FlockingAviary(BaseRLAviary):
                  physics: Physics = Physics.PYB,
                  pyb_freq: int = 240,
                  flocking_freq_hz: int = 10,
+                 decision_freq_hz: int = 5,
                  ctrl_freq: int = 240,
                  gui=False,
                  record=False,
@@ -66,6 +67,10 @@ class FlockingAviary(BaseRLAviary):
             The desired implementation of PyBullet physics/custom dynamics.
         pyb_freq : int, optional
             The frequency at which PyBullet steps (a multiple of ctrl_freq).
+        flocking_freq_hz:
+            Frequency of flocking update.
+        decision_freq_hz:
+            Frequency of decison update. 
         ctrl_freq : int, optional
             The frequency at which the environment steps.
         gui : bool, optional
@@ -122,8 +127,10 @@ class FlockingAviary(BaseRLAviary):
             self.SPEED_LIMIT = 0.6  # m/s
 
         #### reynolds #############
-        self.flocking_freq_hz = flocking_freq_hz
-        self.FLOCKING_PER_PYB = int(self.PYB_FREQ / self.flocking_freq_hz)
+        self.FLOCKING_FREQ_HZ = flocking_freq_hz
+        if self.PYB_FREQ % self.FLOCKING_FREQ_HZ != 0:
+            raise ValueError
+        self.FLOCKING_PER_PYB = int(self.PYB_FREQ / self.FLOCKING_FREQ_HZ)
         self.use_reynolds = use_reynolds
         self.default_flight_height = default_flight_height
         if self.use_reynolds:
@@ -140,9 +147,15 @@ class FlockingAviary(BaseRLAviary):
                                                num_drone=num_drones,
                                                planner="tsp",
                                                enable_exploration=False)
-        self.DECISION_FREQ = 5
-        self.DECISION_PER_PYB = int(self.PYB_FREQ / self.DECISION_FREQ)
-
+        self.DECISION_FREQ_HZ = decision_freq_hz
+        if self.PYB_FREQ % self.DECISION_FREQ_HZ != 0:
+            raise ValueError
+        self.DECISION_PER_PYB = int(
+            self.PYB_FREQ / self.DECISION_FREQ_HZ
+        )  # 每 self.DECISION_PER_PYB 次 pyb 对应一次 decision
+        if self.CTRL_FREQ % self.DECISION_FREQ_HZ != 0:
+            raise ValueError
+        self.DECISION_PER_CTRL = int(self.CTRL_FREQ / self.DECISION_FREQ_HZ)
         ######### for _preprocessAction
         self.target_vs = np.zeros((self.NUM_DRONES, 4))
         self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
@@ -468,7 +481,44 @@ class FlockingAviary(BaseRLAviary):
             [self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
 
     ################################################################################
+    def step(self, action):
+        '''
+        This step in frequency of self.DECISION_FREQ_HZ
+                Parameters
+        ----------
+        action : ndarray | dict[..]
+            The input action for one or more drones, translated into RPMs by
+            the specific implementation of `_preprocessAction()` in each subclass.
 
+        Returns
+        -------
+        ndarray | dict[..]
+            The step's observation, check the specific implementation of `_computeObs()`
+            in each subclass for its format.
+        float | dict[..]
+            The step's reward value(s), check the specific implementation of `_computeReward()`
+            in each subclass for its format.
+        bool | dict[..]
+            Whether the current episode is over, check the specific implementation of `_computeTerminated()`
+            in each subclass for its format.
+        bool | dict[..]
+            Whether the current episode is truncated, check the specific implementation of `_computeTruncated()`
+            in each subclass for its format.
+        bool | dict[..]
+            Whether the current episode is trunacted, always false.
+        dict[..]
+            Additional information as a dictionary, check the specific implementation of `_computeInfo()`
+            in each subclass for its format.
+        '''
+
+        for _ in range(self.DECISION_PER_CTRL - 1):
+            # subclass step is in frequency of CTRL
+            # repeat, flocking update in _preprocessAction
+            super().step(action, need_return=False)
+        # last times
+        return super().step(action)
+
+    ################################################################################
     def _preprocessAction(self, action):
         """
         使用 PID 控制将 action 转化为 RPM, yaw_action 后续也应该从此处产生 
@@ -548,9 +598,6 @@ class FlockingAviary(BaseRLAviary):
 
     def _computeReward(self):
         """Computes the current reward value(s).
-
-        Unused as this subclass is not meant for reinforcement learning.
-
         Returns
         -------
         int

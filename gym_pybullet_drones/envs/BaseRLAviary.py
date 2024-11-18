@@ -364,7 +364,7 @@ class BaseRLAviary(BaseAviary):
                     ret,
                     np.array([
                         self.action_buffer[i][j, :]
-                        for j in range(self.NUM_FDRONES)
+                        for j in range(self.NUM_DRONES)
                     ])
                 ])
             return ret

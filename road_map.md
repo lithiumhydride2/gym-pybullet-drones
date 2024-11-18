@@ -15,3 +15,6 @@ state = np.hstack([
             self.ang_v[nth_drone, :], self.last_clipped_action[nth_drone, :]
         ])
 ```
+# TODO LIST
+
+[] 需要在 flocking_aviary 中将 ctrl_freq 和 decision_freq 分离开来，因为 BaseAviary 中 step() 是按照 ctrl_freq 调用的

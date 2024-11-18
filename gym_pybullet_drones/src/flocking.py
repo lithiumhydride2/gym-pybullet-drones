@@ -39,13 +39,13 @@ DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
 DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = False
-DEFAULT_SIMULATION_FREQ_HZ = 240
-DEFAULT_CONTROL_FREQ_HZ = 48
-DEFAULT_DURATION_SEC = 100
+DEFAULT_SIMULATION_FREQ_HZ = 120
+DEFAULT_CONTROL_FREQ_HZ = 60
+DEFAULT_DURATION_SEC = 40
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
-DEFAULT_NUM_DRONE = 3
+DEFAULT_NUM_DRONE = 5
 
 
 def run(drone=DEFAULT_DRONE,
@@ -58,6 +58,7 @@ def run(drone=DEFAULT_DRONE,
         simulation_freq_hz=DEFAULT_SIMULATION_FREQ_HZ,
         control_freq_hz=DEFAULT_CONTROL_FREQ_HZ,
         flocking_freq_hz=10,
+        decision_freq_hz=5,
         duration_sec=DEFAULT_DURATION_SEC,
         output_folder=DEFAULT_OUTPUT_FOLDER,
         default_flight_height=DEFAULT_FLIGHT_HEIGHT,
@@ -69,8 +70,8 @@ def run(drone=DEFAULT_DRONE,
     PHY = Physics.PYB
 
     #### Create the environment ################################
-    control_by_RL_mask = np.ones((num_drones, ))
-    # control_by_RL_mask[0] = 1
+    control_by_RL_mask = np.zeros((num_drones, ))
+    control_by_RL_mask[0] = 1
     env = FlockingAviary(drone_model=drone,
                          num_drones=num_drones,
                          control_by_RL_mask=control_by_RL_mask.astype(bool),
@@ -81,6 +82,7 @@ def run(drone=DEFAULT_DRONE,
                          pyb_freq=simulation_freq_hz,
                          ctrl_freq=control_freq_hz,
                          flocking_freq_hz=flocking_freq_hz,
+                         decision_freq_hz=decision_freq_hz,
                          gui=gui,
                          record=record_video,
                          obstacles=obstacles,
@@ -106,7 +108,7 @@ def run(drone=DEFAULT_DRONE,
     START = time.time()
 
     ##### main_loop ##########################################
-    for i in range(0, int(duration_sec * env.CTRL_FREQ)):
+    for i in range(0, int(duration_sec * env.DECISION_FREQ_HZ)):
 
         ############################################################
         # for j in range(3): env._showDroneLocalAxes(j)
@@ -115,12 +117,12 @@ def run(drone=DEFAULT_DRONE,
         obs, reward, terminated, truncated, info = env.step(action)
 
         #### Compute the current action#############
-        # action = env.computeYawActionTSP(obs)
+        action = env.computeYawActionTSP(obs)
 
         #### Log the simulation ####################################
         for j in range(num_drones):
             logger.log(drone=j,
-                       timestamp=i / env.CTRL_FREQ,
+                       timestamp=i / env.DECISION_FREQ_HZ,
                        state=env.drone_states[j],
                        control=np.hstack([env.target_vs[j, :3],
                                           np.zeros(9)]))
@@ -129,8 +131,9 @@ def run(drone=DEFAULT_DRONE,
         env.render()
 
         #### Sync the simulation ###################################
+        # sync 需要传入 ctrl_time_gap 与 ctrl_count
         if gui:
-            sync(i, START, env.CTRL_TIMESTEP)
+            sync(i, START, 1 / env.DECISION_FREQ_HZ)
 
     #### Close the environment #################################
     env.close()
