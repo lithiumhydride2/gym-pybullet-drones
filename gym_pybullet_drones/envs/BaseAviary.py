@@ -661,8 +661,12 @@ class BaseAviary(gym.Env):
         ego_point = np.dot(rot_matrix.T, ego_point)
         return ego_point
 
+    @property
     def _getCurrTime(self):
-        return self.step_counter
+        '''
+        step counter is counter for pyb
+        '''
+        return self.step_counter * self.PYB_TIMESTEP
 
     def _computeHeading(self, nth_drone):
         '''

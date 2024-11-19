@@ -17,4 +17,12 @@ state = np.hstack([
 ```
 # TODO LIST
 
-[] 需要在 flocking_aviary 中将 ctrl_freq 和 decision_freq 分离开来，因为 BaseAviary 中 step() 是按照 ctrl_freq 调用的
+[x] 需要在 flocking_aviary 中将 ctrl_freq 和 decision_freq 分离开来，因为 BaseAviary 中 step() 是按照 ctrl_freq 调用的
+
+[] 性能分析 https://blog.csdn.net/weixin_40583722/article/details/121659851
+```bash
+python -m cProfile -o flame_of_flocking.prof flocking.py
+flameprof flame_of_flocking.prof > flame_of_flocking.svg
+```
+
+[] 计算 gaussian_process 需要的计算压力太大了， 需要提高运算速度， 考虑使用 `GPyTorch`

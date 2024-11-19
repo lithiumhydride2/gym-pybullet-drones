@@ -164,7 +164,7 @@ class FlockingAviary(BaseRLAviary):
 
         ### cache
         self.last_obs = None
-
+        self.last_unc = [1.0] * num_drones
         ### hyper param
         self.VISABLE_DEGREE_THERSHOLD = 5  # in degree
         self.VISABLE_FAIL_DETECT = 0.05  # 5% 的概率无法检出目标
@@ -245,7 +245,7 @@ class FlockingAviary(BaseRLAviary):
                         other_pose_mask = np.ones((self.NUM_DRONES, ))
                         other_pose_mask[nth] = .0
                         obs_nth = self.decisions[nth].step(
-                            curr_time=self.step_counter * self.PYB_TIMESTEP,
+                            curr_time=self._getCurrTime,
                             detection_map=self._computePositionEstimation(
                                 adjacency_Mat, nth),
                             ego_heading=circle_to_yaw(
@@ -263,7 +263,7 @@ class FlockingAviary(BaseRLAviary):
     @property
     def _relative_position(self):
         '''
-        其中包含了相对自身的位置 [0,0], 需处理
+        其中包含了相对自身的位置 [0,0], 需处理, in shape [num_drones,num_drones,2]
         '''
         drone_poses = self.drone_states[:, 0:3]
         return np.array([[
@@ -598,20 +598,43 @@ class FlockingAviary(BaseRLAviary):
 
     def _computeReward(self):
         """Computes the current reward value(s).
+        - Reward 是 agent 与环境交互获得的 reward , 与 obs 无关
+        
+        Reward 当前为所有 reward 的累积
+
         Returns
         -------
         int
             Dummy value.
 
         """
-        return -1
+        if self.OBS_TYPE == ObservationType.GAUSSIAN:
+
+            def compute_reward(nth):
+                ground_truth = self.decisions[nth].GP_ground_truth.fn()
+                high_info_idx = self.decisions[
+                    nth].GP_ground_truth.get_high_info_indx(ground_truth)
+                _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
+                    self._getCurrTime, high_info_idx, return_all=True)
+
+                unc_update = np.array(self.last_unc[nth]) - np.array(unc_list)
+                reward = np.sum(unc_update[unc_update > .0])
+                self.last_unc[nth] = unc_list
+                return reward
+
+            reward = np.zeros((self.NUM_DRONES, ))
+            for nth, mask in enumerate(self.control_by_RL_mask):
+                if mask:
+                    reward[nth] = compute_reward(nth)
+
+            return np.sum(reward)
 
     ################################################################################
 
     def _computeTerminated(self):
         """Computes the current terminated value(s).
 
-        Unused as this subclass is not meant for reinforcement learning.
+        ru
 
         Returns
         -------
@@ -626,14 +649,34 @@ class FlockingAviary(BaseRLAviary):
     def _computeTruncated(self):
         """Computes the current truncated value(s).
 
-        Unused as this subclass is not meant for reinforcement learning.
-
-        Returns
+        truncted: 任务被迫中止, 由于外部限制回合被截断
         -------
         bool
             Dummy value.
-
+        
         """
+        # update in _preprocessAction
+        drone_states = self.drone_states
+        relative_position = self._relative_position
+
+        def truncated(nth):
+            other_mask = np.ones((self.NUM_DRONES))
+            other_mask[nth] = 0.
+            # 无人机间最小距离小于 1.0 m
+            if np.min(
+                    np.linalg.norm(relative_position[nth],
+                                   axis=1)[other_mask.astype(bool)]) < 1.0:
+                return True
+            # truncate when a drone is too tilted
+            if abs(drone_states[nth][7]) > .4 or abs(
+                    drone_states[nth][8]) > .4:
+                return True
+            return False
+
+        for idx, mask in enumerate(self.control_by_RL_mask):
+            if mask and truncated(idx):
+                return True
+
         return False
 
     ################################################################################

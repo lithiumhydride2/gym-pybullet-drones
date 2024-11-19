@@ -79,30 +79,6 @@ class UAVGaussian():
         self.kFovEffectGP = False  # FOV信息是否影响高斯过程
         self.last_negitive_sample_time = 0.0
 
-    def __update_relative_pos(self):
-        """
-        根据 fake_ros_msg 提供的 curr_index 更新 self.relative_pose
-        """
-        if self.other_pose_local is None:
-            # all pose here are in world corridnate
-            ego_pos = np.array([
-                self.pose.loc[self.curr_index]["pose.position.x"],
-                self.pose.loc[self.curr_index]["pose.position.y"],
-            ] * len(self.other_list))
-            other_pos = np.array([
-                self.poses[other - 1].loc[self.curr_index][key]
-                for other in self.other_list
-                for key in ["pose.position.x", "pose.position.y"]
-            ])
-            relative_pos = other_pos - ego_pos
-        else:
-            relative_pos = np.array([
-                self.other_pose_local[index].loc[self.curr_index][key]
-                for index in range(len(self.other_list))
-                for key in ["point.x", "point.y"]
-            ])
-        self.relative_pose.loc[self.curr_index] = relative_pos
-
     def get_fake_detection(self):
         if not hasattr(self, "kCountGetFakeDetection"):
             self.count = 0
@@ -144,23 +120,20 @@ class UAVGaussian():
 
         # 更新 GP 参数
         self.GP_detection.update_GPs()
-        all_pred, all_std, pred_s = self.GP_detection.update_grids(time)
+        _, all_std, _ = self.GP_detection.update_grids(time)
 
         ##### 触发 fov 影响的采集
-        if self.kFovEffectGP and self.negitive_gather:
-            neg_std = self.GP_detection.update_negititve_gps(
-                X=np.zeros((1, 2)),
-                Y=0,
-                time=time,
-                mask=self.__get_fov_mask(fov_vector))
-            all_std = np.min(np.array([neg_std, all_std]), axis=0)
-        ##### 否则叠加最新的 fov effect
-        elif self.kFovEffectGP and len(self.all_stds_list):
-            all_std = self.all_stds_list[-1]
+        # if self.kFovEffectGP and self.negitive_gather:
+        #     neg_std = self.GP_detection.update_negititve_gps(
+        #         X=np.zeros((1, 2)),
+        #         Y=0,
+        #         time=time,
+        #         mask=self.__get_fov_mask(fov_vector))
+        #     all_std = np.min(np.array([neg_std, all_std]), axis=0)
+        # ##### 否则叠加最新的 fov effect
+        # elif self.kFovEffectGP and len(self.all_stds_list):
+        #     all_std = self.all_stds_list[-1]
 
-        self.all_means_list.append(all_pred)
-        self.all_stds_list.append(all_std)
-        self.gps_means_list.append(pred_s)
         return all_std
 
     @property
@@ -228,7 +201,7 @@ class UAVGaussian():
             detection_map: key: nth_drone value: position estimation, 需要坐标系下直接计算的 相对位置
             ego_heading: 无人机当前 yaw 角， 世界坐标系下
             fov_vector: 无人机当前 fov, 由两向量组成，世界坐标系下
-            relative_pose: 其他无人机的真实位置
+            relative_pose: 其他无人机的真实位置,需不包含与自身的相对位置
         ----
         ## return:
         action [vx,vy,yaw]

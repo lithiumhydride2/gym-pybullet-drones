@@ -49,21 +49,30 @@ class GaussianProcessGroundTruth:
                     np.linspace(-1, 1, self.grid_size),
                 )))  # in shape (self.grid_size **2 , 2)
 
-        self.trajectories = [self.mean.copy()]
-        self.y_true_lists = [self.fn(self.grid)]
-
     def step(self, other_pose: np.ndarray):
         """
+        由无人机真实相对位置，更新 mean of gaussian_process
         ## param:
         other_pose: np.ndarray or list contains: [t0.x t0.y t1.x t1.y ...]
         """
         self.mean = np.array(other_pose).reshape(-1, 2) / self._pose_max_val
-        self.trajectories += [self.mean.copy()]
-        self.y_true_lists += [self.fn(self.grid)]
 
-    def fn(self, X: np.ndarray):
+    def get_high_info_indx(self,
+                           ground_truth,
+                           high_info_threshold=math.exp(-0.5)):
+        '''
+        ground_truth 由 GaussianProcessGroundTruth.fn()给出
+        '''
+        high_info_idx = []
+        for i in range(self.target_num):
+            idx = np.argwhere(ground_truth[:, i] > high_info_threshold)
+            high_info_idx += [idx.squeeze(1)]
+        return high_info_idx
+
+    def fn(self):
         """
-        # description : 计算一个二维数组 X 中每个点的函数值 y
+        # description:
+            根据 self.mean 计算真实高斯分布
          ---------------
         # param :
          - X : in shape (grid_size^2,2)
@@ -72,7 +81,7 @@ class GaussianProcessGroundTruth:
         - y : 表示每个坐标对应的每个高斯函数的函数值
          ---------------
         """
-        pass
+        X = self.grid
         y = np.zeros(shape=(
             X.shape[0],
             self.target_num))  # in shape (grid_size**2, self.target_num)
@@ -157,6 +166,7 @@ class GaussianProcess:
                     np.linspace(-1, 1, self.grid_size),
                     np.linspace(-1, 1, self.grid_size),
                 )))  # in shape (self.grid_size **2 , 2)
+        self.curr_t = -1.0  # 标记上一次 update_grid 时刻
 
     def add_observed_point(self, point_pos, value):
         self.observed_points.append(point_pos)
@@ -253,12 +263,12 @@ class GaussianProcess:
 
     def update_grid(self, t):
         """
-        predict using tha Gaussian Process with grid
+        predict using tha Gaussian Process with grid, and storage it
         """
+        self.curr_t = t
         self.y_pred_at_grid, self.std_at_grid = self.gp.predict(
             add_t(self.grid, t), return_std=True)
         # 记录历史状态
-
         return self.y_pred_at_grid, self.std_at_grid
 
     def evaulate_grid(self, t):
@@ -286,9 +296,12 @@ class GaussianProcess:
             return np.sum(self.std_at_grid * self.std_at_grid)
 
     def evaluate_unc(self, idx=None, t=None):
+        '''
+        在 t 时刻评估 unc , t 必须有效
+        '''
         # 评估在特定点的不确定性水平
-        if t is not None:
-            self.update_grid(t)
+        if t is None or t != self.curr_t:
+            raise ValueError
         if idx is not None:
             X = self.std_at_grid[idx]
             return np.mean(X)
@@ -369,7 +382,7 @@ class GaussianProcessWrapper:
                 other_id=other,
             ) for other in self.other_list
         ]
-        self.curr_t = None
+        self.curr_t = None  # self.curr_t 用来记录上一次调用 self.update_grids 的时刻
         self.kTargetExistBeliefThreshold = 0.4
         self.kHighInfoIdxThreshold = math.exp(-0.5)
         self.kAddNegitiveGP = True
@@ -392,7 +405,7 @@ class GaussianProcessWrapper:
             gp.add_observed_point(point_pos[i], values[i])
 
     def update_GPs(self):
-        for id, GP in enumerate(self.GPs):
+        for _, GP in enumerate(self.GPs):
             GP.update_gp()
 
     def update_negititve_gps(self, X=None, Y=None, time=None, mask=None):
@@ -438,16 +451,24 @@ class GaussianProcessWrapper:
         # contiguous at feature level
         return node_feature
 
+    # def update_grids(self, time=None):
+    #     '''
+    #     在指定 time 时刻更新 grids
+    #     '''
+    #     if time is None:
+    #         raise ValueError
+
+    #     for gp in self.GPs:
+    #         gp.update_grid(time)
+
     def update_grids(self, time: float = None):
         '''
-        if time is None, use self.curr_t as time
-
+        update grids at time t
         return: all_pred, all_std, preds
         '''
-        if time is None and self.curr_t is not None:
-            time = self.curr_t
-        if time is not None:
-            self.curr_t = time
+        if time is None:
+            raise ValueError
+
         preds = []
         stds = []
         for gp in self.GPs:
@@ -459,7 +480,6 @@ class GaussianProcessWrapper:
 
         # take minimum
         all_std = np.asarray(stds).min(axis=0)
-        # 叠加 negitive_gp
 
         return all_pred, all_std, preds
 
@@ -559,13 +579,17 @@ class GaussianProcessWrapper:
         return std_trace, np.mean(std_trace)
 
     def eval_avg_unc(self, t, high_info_idx=None, return_all=False):
+        '''
+        eval UNC at timestamp t
+        '''
         std_trace = []
         if t != self.curr_t:
             self.curr_t = t
-            self.update_grids()
+            self.update_grids(t)
+
         for i, gp in enumerate(self.GPs):
             idx = None if high_info_idx is None else high_info_idx[i]
-            std_trace += [gp.evaluate_unc(idx)]
+            std_trace += [gp.evaluate_unc(idx, t)]
         avg_std_trace = np.mean(std_trace)
         return (avg_std_trace, std_trace) if return_all else avg_std_trace
 
