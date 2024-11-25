@@ -25,4 +25,6 @@ python -m cProfile -o flame_of_flocking.prof flocking.py
 flameprof flame_of_flocking.prof > flame_of_flocking.svg
 ```
 
-[] 计算 gaussian_process 需要的计算压力太大了， 需要提高运算速度， 考虑使用 `GPyTorch`
+[x] 计算 gaussian_process 需要的计算压力太大了， 需要提高运算速度， 考虑使用 `GPyTorch`
+    - 使用了 GPyTorch, 将运行速度提升了 5 倍
+[] 考虑使用 方位测量 和 距离测量进行替代

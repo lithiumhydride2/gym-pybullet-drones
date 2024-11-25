@@ -106,3 +106,7 @@ def circle_to_yaw(circile):
     circile = np.array(circile).reshape(-1, 2)
     yaw = np.arctan2(circile[:, 1], circile[:, 0])
     return yaw
+
+
+def add_t(X, t: float):
+    return np.concatenate((X, np.zeros((X.shape[0], 1)) + t), axis=1)

@@ -6,10 +6,10 @@ from itertools import product
 from matplotlib import pyplot as plt
 from sklearn.metrics import mean_squared_error
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Matern, ConstantKernel
-from sklearn.exceptions import ConvergenceWarning
+from sklearn.gaussian_process.kernels import Matern
+from gym_pybullet_drones.envs.gaussian_process.UCB.gp_torch import GaussianProcessTorch
+from sklearn.gaussian_process.kernels import RBF
 from collections import deque
-
 from sympy import N
 
 
@@ -265,9 +265,14 @@ class GaussianProcess:
         """
         predict using tha Gaussian Process with grid, and storage it
         """
+        # use cache
+        if self.curr_t == t:
+            return self.y_pred_at_grid, self.std_at_grid
+
         self.curr_t = t
-        self.y_pred_at_grid, self.std_at_grid = self.gp.predict(
-            add_t(self.grid, t), return_std=True)
+        if self.y_pred_at_grid is None:
+            self.y_pred_at_grid, self.std_at_grid = self.gp.predict(
+                add_t(self.grid, t), return_std=True)
         # 记录历史状态
         return self.y_pred_at_grid, self.std_at_grid
 
@@ -281,10 +286,6 @@ class GaussianProcess:
             self.update_grid(t)
         RMSE = np.sqrt(mean_squared_error(self.y_pred_at_grid, y_true))
         return RMSE
-
-    def evaluate_F1score(self, y_true, t):
-        score = self.gp.score(add_t(self.grid, t), y_true)
-        return score
 
     def evaluate_cov_trace(self, idx=None, t=None):
         if t is not None:
@@ -308,49 +309,6 @@ class GaussianProcess:
         else:
             return np.mean(self.std_at_grid)
 
-    def evaluate_mutual_info(self, t):
-        n_sample = self.grid.shape[0]
-        _, cov = self.gp.predict(add_t(self.grid, t), return_cov=True)
-        # 评估时间t时，模型预测不确定性大小
-        mi = (1 / 2) * np.log(
-            np.linalg.det(0.01 * cov.reshape(n_sample, n_sample) +
-                          np.identity(n_sample)))
-        return mi
-
-    def evaluate_KL_div(self, y_true, t=None, norm=True, base=None):
-        if t is not None:
-            self.update_grid(t)
-        y_pred = copy.deepcopy(self.y_pred_at_grid)
-        y_pred[y_pred < 0] = 0
-        P = np.array(y_true) + 1e-8
-        Q = np.array(y_pred).reshape(-1) + 1e-8
-        if norm:
-            P /= np.sum(P, axis=0, keepdims=True)
-            Q /= np.sum(Q, axis=0, keepdims=True)
-        vec = P * np.log(P / Q)
-        S = np.sum(vec, axis=0)
-        if base is not None:
-            S /= np.log(base)
-        return S
-
-    def evaluate_JS_div(self, y_true, t=None, norm=True):
-        if t is not None:
-            self.update_grid(t)
-        y_pred = copy.deepcopy(self.y_pred_at_grid)
-        y_pred[y_pred < 0] = 0
-        P = np.array(y_true) + 1e-8
-        Q = np.array(y_pred).reshape(-1) + 1e-8
-        if norm:
-            P /= np.sum(P, axis=0, keepdims=True)
-            Q /= np.sum(Q, axis=0, keepdims=True)
-        M = 0.5 * (P + Q)
-        vec_PM = P * np.log(P / M)
-        vec_QM = Q * np.log(Q / M)
-        KL_PM = np.sum(vec_PM, axis=0)
-        KL_QM = np.sum(vec_QM, axis=0)
-        JS = 0.5 * (KL_PM + KL_QM)
-        return JS
-
 
 class GaussianProcessWrapper:
 
@@ -358,7 +316,8 @@ class GaussianProcessWrapper:
                  num_uav: int,
                  other_list: list[int],
                  node_coords: np.ndarray,
-                 id=0) -> None:
+                 id=0,
+                 use_gpytorch=True) -> None:
         """
         ### param :
          - num_uav: 无人机总数量
@@ -374,14 +333,20 @@ class GaussianProcessWrapper:
         self.id = id
         self.other_list = other_list
         self.node_coords = node_coords
-        self.GPs: list[GaussianProcess] = [
-            GaussianProcess(
-                node_coords=node_coords,
-                adaptive_kernel=False,
-                id=self.id,
-                other_id=other,
-            ) for other in self.other_list
-        ]
+        if use_gpytorch:
+            self.GPs: list[GaussianProcessTorch] = [
+                GaussianProcessTorch(id=self.id, other_id=other)
+                for other in self.other_list
+            ]
+        else:
+            self.GPs: list[GaussianProcess] = [
+                GaussianProcess(
+                    node_coords=node_coords,
+                    adaptive_kernel=False,
+                    id=self.id,
+                    other_id=other,
+                ) for other in self.other_list
+            ]
         self.curr_t = None  # self.curr_t 用来记录上一次调用 self.update_grids 的时刻
         self.kTargetExistBeliefThreshold = 0.4
         self.kHighInfoIdxThreshold = math.exp(-0.5)
@@ -421,46 +386,6 @@ class GaussianProcessWrapper:
 
         return self.GPs[0].update_negitive_gp(add_t(X, self.curr_t), Y, mask)
 
-    def update_node_feature(self, t):
-        """
-        t: time of now
-
-        未后续提供 feature
-        """
-        if t != self.curr_t:
-            self.curr_t = t
-            self.update_grids()
-
-        node_info, node_info_future = [], []  # (target, node, 2)
-        for gp in self.GPs:
-            node_pred, node_std = gp.update_node(t)
-            node_pred_future, node_std_future = gp.update_node(t + 2)
-            node_info += [
-                np.hstack((node_pred.reshape(-1, 1), node_std.reshape(-1, 1)))
-            ]
-            node_info_future += [
-                np.hstack((node_pred_future.reshape(-1, 1),
-                           node_std_future.reshape(-1, 1)))
-            ]
-        node_feature = np.concatenate(
-            (np.asarray(node_info), np.asarray(node_info_future)),
-            axis=-1)  # (target, node, features(4))
-        node_feature = node_feature.transpose(
-            (1, 0, 2)).reshape(self.node_coords.shape[0],
-                               -1)  # (node, (targetxfeature))
-        # contiguous at feature level
-        return node_feature
-
-    # def update_grids(self, time=None):
-    #     '''
-    #     在指定 time 时刻更新 grids
-    #     '''
-    #     if time is None:
-    #         raise ValueError
-
-    #     for gp in self.GPs:
-    #         gp.update_grid(time)
-
     def update_grids(self, time: float = None):
         '''
         update grids at time t
@@ -477,7 +402,6 @@ class GaussianProcessWrapper:
             stds.append(std_temp.squeeze())
         # take maximum
         all_pred = np.asarray(preds).max(axis=0)
-
         # take minimum
         all_std = np.asarray(stds).min(axis=0)
 
@@ -600,65 +524,6 @@ class GaussianProcessWrapper:
             std_sum += [unc[i] * num_high[i]]
         avg_std_sum = np.mean(std_sum)
         return (avg_std_sum, std_sum) if return_all else avg_std_sum
-
-    def eval_avg_KL(self, y_true, t, return_all=False):
-        KL = []
-        if t != self.curr_t:
-            self.curr_t = t
-            self.update_grids()
-        for i, gp in enumerate(self.GPs):
-            KL += [gp.evaluate_KL_div(y_true[:, i])]
-        avg_KL = np.mean(KL)
-        return (avg_KL, KL) if return_all else avg_KL
-
-    def eval_avg_JS(self, y_true, t, return_all=False):
-        JS = []
-        if t != self.curr_t:
-            self.curr_t = t
-            self.update_grids()
-        for gp in self.GPs:
-            JS += [
-                np.amax([
-                    gp.evaluate_JS_div(y_true[:, i])
-                    for i in range(self.num_uav - 1)
-                ])
-            ]
-        avg_JS = np.mean(JS)
-        return (avg_JS, JS) if return_all else avg_JS
-
-    def eval_all_js(self, y_true_all, y_pred_all, norm=True):
-        P = np.array(y_true_all) + 1e-8
-        Q = np.array(y_pred_all).reshape(-1) + 1e-8
-        if norm:
-            P /= np.sum(P, axis=0, keepdims=True)
-            Q /= np.sum(Q, axis=0, keepdims=True)
-        M = 0.5 * (P + Q)
-        vec_PM = P * np.log(P / M)
-        vec_QM = Q * np.log(Q / M)
-        KL_PM = np.sum(vec_PM, axis=0)
-        KL_QM = np.sum(vec_QM, axis=0)
-        JS = 0.5 * (KL_PM + KL_QM)
-        return JS
-
-    def eval_avg_F1(self, y_true, t, return_all=False):
-        F1 = []
-        if t != self.curr_t:
-            self.curr_t = t
-            self.update_grids()
-        for i, gp in enumerate(self.GPs):
-            F1 += [gp.evaluate_F1score(y_true[:, i], self.curr_t)]
-        avg_F1 = np.mean(F1)
-        return (avg_F1, F1) if return_all else avg_F1
-
-    def eval_avg_MI(self, t, return_all=False):
-        MI = []
-        if t != self.curr_t:
-            self.curr_t = t
-            self.update_grids()
-        for gp in self.GPs:
-            MI += [gp.evaluate_mutual_info(self.curr_t)]
-        avg_MI = np.mean(MI)
-        return (avg_MI, MI) if return_all else avg_MI
 
 
 if __name__ == "__main__":

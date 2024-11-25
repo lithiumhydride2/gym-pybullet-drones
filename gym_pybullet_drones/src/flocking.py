@@ -41,11 +41,11 @@ DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = False
 DEFAULT_SIMULATION_FREQ_HZ = 120
 DEFAULT_CONTROL_FREQ_HZ = 60
-DEFAULT_DURATION_SEC = 10
+DEFAULT_DURATION_SEC = 30
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
-DEFAULT_NUM_DRONE = 5
+DEFAULT_NUM_DRONE = 6
 
 
 def run(drone=DEFAULT_DRONE,
@@ -72,6 +72,7 @@ def run(drone=DEFAULT_DRONE,
     #### Create the environment ################################
     control_by_RL_mask = np.zeros((num_drones, ))
     control_by_RL_mask[0] = 1
+
     env = FlockingAviary(drone_model=drone,
                          num_drones=num_drones,
                          control_by_RL_mask=control_by_RL_mask.astype(bool),
@@ -117,7 +118,7 @@ def run(drone=DEFAULT_DRONE,
         obs, reward, terminated, truncated, info = env.step(action)
 
         #### Compute the current action#############
-        action = env.computeYawActionTSP(obs)
+        # action = env.computeYawActionTSP(obs)
 
         #### Log the simulation ####################################
         for j in range(num_drones):

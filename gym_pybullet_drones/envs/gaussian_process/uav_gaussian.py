@@ -79,16 +79,6 @@ class UAVGaussian():
         self.kFovEffectGP = False  # FOV信息是否影响高斯过程
         self.last_negitive_sample_time = 0.0
 
-    def get_fake_detection(self):
-        if not hasattr(self, "kCountGetFakeDetection"):
-            self.count = 0
-            self.kCountGetFakeDetection = 5
-        self.count += 1
-        if self.count >= self.kCountGetFakeDetection:
-            self.count = 0
-            return True
-        return False
-
     def _gp_step(self,
                  detection_map: dict[int, np.ndarray] = None,
                  other_pose=None,
@@ -116,7 +106,7 @@ class UAVGaussian():
             observe_point = detection_map[other_nth].reshape(-1,
                                                              2) / 6.0  # 归一化
             self.GP_detection.GPbyOtherID(other_nth).add_observed_point(
-                point_pos=add_t(observe_point, time), value=observe_value)
+                add_t(observe_point, time), observe_value)
 
         # 更新 GP 参数
         self.GP_detection.update_GPs()

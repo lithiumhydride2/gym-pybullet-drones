@@ -207,6 +207,12 @@ class FlockingAviary(BaseRLAviary):
             The observation space, i.e., and ndarray of shape (NUM_DRONES, 20).
 
         """
+        if self.OBS_TYPE == ObservationType.POSE:
+            # pose 形式的观测用什么样的观测输入呢： 初步考虑使用 distance heading
+            # 对于无法观测到的无人机，使用 np.inf 作为观测输入？
+
+            pass
+
         if self.OBS_TYPE == ObservationType.GAUSSIAN:
             heat_map_sz = 40**2
             obs_lower_bound = np.array([
@@ -217,9 +223,9 @@ class FlockingAviary(BaseRLAviary):
                 np.ones((heat_map_sz, )) for mask in self.control_by_RL_mask
                 if mask
             ])
-        return spaces.Box(low=obs_lower_bound,
-                          high=obs_upper_bound,
-                          dtype=np.float32)
+            return spaces.Box(low=obs_lower_bound,
+                              high=obs_upper_bound,
+                              dtype=np.float32)
 
     def _computeObs(self):
         '''
@@ -233,6 +239,11 @@ class FlockingAviary(BaseRLAviary):
 
         self.decisions: dict[int, decision]
 
+        # if self.OBS_TYPE == ObservationType.POSE:
+        #     adjacency_Mat = self._computeAdjacencyMatFOV()
+        #     for nth, mask in enumerate(self.control_by_RL_mask):
+        #         if mask:
+        #             detection_m
         if self.OBS_TYPE == ObservationType.GAUSSIAN:
             ############ obs type in gaussian
             if self.step_counter % self.DECISION_PER_PYB == 0:
