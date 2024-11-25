@@ -407,35 +407,6 @@ class GaussianProcessWrapper:
 
         return all_pred, all_std, preds
 
-    def get_observed_points(self, kTargetExistBeliefThreshold=None, time=None):
-        '''
-        返回当前高斯过程中，置信度最大的点，作为 decision 或其他环节输入
-        ---
-        如果输入时间，则是对未来或当下的估计
-        '''
-        if kTargetExistBeliefThreshold is None:
-            kTargetExistBeliefThreshold = self.kTargetExistBeliefThreshold
-        observed_points = []
-        grid_size = self.GPs[0].grid_size
-        for index, gp in enumerate(self.GPs):
-            if time is None:
-                y_pred_grid = gp.y_pred_at_grid
-            else:
-                y_pred_grid, _ = gp.evaulate_grid(time)
-            if y_pred_grid is None:
-                continue
-
-            y_pred_grid = y_pred_grid.reshape(grid_size, grid_size)
-            max_row, max_col = np.unravel_index(y_pred_grid.argmax(),
-                                                y_pred_grid.shape)
-            # 原点为 self.grid_size / 2, from row,col to [x,y]
-            point_vector = np.array([
-                max_row - grid_size / 2, max_col - grid_size / 2
-            ]) / (grid_size / 2)
-            if np.max(y_pred_grid) > kTargetExistBeliefThreshold:
-                observed_points.append(point_vector)
-        return observed_points
-
     def get_high_info_idx(self,
                           source="detection",
                           kHighInfoIdxThreshold=None):

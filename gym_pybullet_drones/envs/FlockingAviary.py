@@ -1,4 +1,7 @@
 import os
+import matplotlib
+import matplotlib.axes
+import matplotlib.figure
 import numpy as np
 from gymnasium import spaces
 from functools import lru_cache
@@ -10,6 +13,8 @@ from gym_pybullet_drones.control.Reynolds import Reynolds
 from gym_pybullet_drones.envs.gaussian_process.uav_gaussian import UAVGaussian as decision
 from scipy.spatial.transform import Rotation as R
 from gym_pybullet_drones.utils.utils import *
+from matplotlib import animation
+import matplotlib.pyplot as plt
 
 
 class FlockingAviary(BaseRLAviary):
@@ -168,8 +173,25 @@ class FlockingAviary(BaseRLAviary):
         ### hyper param
         self.VISABLE_DEGREE_THERSHOLD = 5  # in degree
         self.VISABLE_FAIL_DETECT = 0.05  # 5% 的概率无法检出目标
+        self._gp_debug_init(user_debug_gui)
 
     ################################################################################
+    def _gp_debug_init(self, user_debug_gui):
+        self.plot_online_stuff = {}
+
+        def init_animation(name, figsize=[5, 5]):
+            figure = plt.figure(num=name, figsize=figsize)
+            ax = plt.axes()
+            return figure, ax
+
+        if user_debug_gui:
+            for index, mask in enumerate(self.control_by_RL_mask):
+                if mask:
+                    self.plot_online_stuff[f"gp_std_{index}"] = init_animation(
+                        f"gp_std_{index}")
+                    self.plot_online_stuff[
+                        f"gp_pred_{index}"] = init_animation(
+                            f"gp_pred_{index}")
 
     def _actionSpace(self):
         """Returns the action space of the environment.
@@ -226,49 +248,6 @@ class FlockingAviary(BaseRLAviary):
             return spaces.Box(low=obs_lower_bound,
                               high=obs_upper_bound,
                               dtype=np.float32)
-
-    def _computeObs(self):
-        '''
-        Return the current observation of the environment.
-        ## Description:
-            self.drone_poses 在此处得到更新
-            self.detection_map 在此处得到更新, 由于 detection 包含随机数，因此每次循环仅更新一次
-        '''
-        # self.drone_states = self._computeDroneState()
-        # step_counter 对pyb freq 进行计数
-
-        self.decisions: dict[int, decision]
-
-        # if self.OBS_TYPE == ObservationType.POSE:
-        #     adjacency_Mat = self._computeAdjacencyMatFOV()
-        #     for nth, mask in enumerate(self.control_by_RL_mask):
-        #         if mask:
-        #             detection_m
-        if self.OBS_TYPE == ObservationType.GAUSSIAN:
-            ############ obs type in gaussian
-            if self.step_counter % self.DECISION_PER_PYB == 0:
-                obs = []
-                adjacency_Mat = self._computeAdjacencyMatFOV()
-                # 由 detection step 获得观测
-                relative_position = self._relative_position
-                for nth, mask in enumerate(self.control_by_RL_mask):
-                    if mask:
-                        other_pose_mask = np.ones((self.NUM_DRONES, ))
-                        other_pose_mask[nth] = .0
-                        obs_nth = self.decisions[nth].step(
-                            curr_time=self._getCurrTime,
-                            detection_map=self._computePositionEstimation(
-                                adjacency_Mat, nth),
-                            ego_heading=circle_to_yaw(
-                                self._computeHeading(nth)[:2]),
-                            fov_vector=self._computeFovVector(nth),
-                            relative_pose=relative_position[nth][
-                                other_pose_mask.astype(bool)])
-                        obs.append(obs_nth)
-
-                self.last_obs = obs  # 这样做是由于 obs 在 step_counter == 0 可以初始化
-
-        return np.asarray(self.last_obs)
 
     ################################################################################
     @property
@@ -353,8 +332,10 @@ class FlockingAviary(BaseRLAviary):
             Detection_map : key(nth_drone):value(pos estimation in 2D)
         '''
         drone_poses = self.drone_states[:, 0:3]
+        ego_pose = self.drone_states[nth_drone, 0:3]
+        # 这里需要计算相对位置
         poses_in_fov = drone_poses[AdjacencyMat[nth_drone].astype(
-            bool)]  # 筛选能够观测到的无人机绝对位置
+            bool)] - ego_pose  # 筛选能够观测到的无人机绝对位置
         pose_index_in_fov = np.array(list(range(
             self.NUM_DRONES)))[AdjacencyMat[nth_drone].astype(bool)]
 
@@ -606,6 +587,58 @@ class FlockingAviary(BaseRLAviary):
         return rpm
 
     ################################################################################
+    def _computeObs(self):
+        '''
+        Return the current observation of the environment.
+        ## Description:
+            self.drone_poses 在此处得到更新
+            self.detection_map 在此处得到更新, 由于 detection 包含随机数，因此每次循环仅更新一次
+        '''
+
+        self.decisions: dict[int, decision]
+        if self.OBS_TYPE == ObservationType.GAUSSIAN:
+            ############ obs type in gaussian
+            if self.step_counter % self.DECISION_PER_PYB == 0:
+                obs = []
+                adjacency_Mat = self._computeAdjacencyMatFOV()
+                # 由 detection step 获得观测
+                relative_position = self._relative_position
+                for nth, mask in enumerate(self.control_by_RL_mask):
+                    if mask:
+                        other_pose_mask = np.ones((self.NUM_DRONES, ))
+                        other_pose_mask[nth] = .0
+                        obs_nth = self.decisions[nth].step(
+                            curr_time=self._getCurrTime,
+                            detection_map=self._computePositionEstimation(
+                                adjacency_Mat, nth),
+                            ego_heading=circle_to_yaw(
+                                self._computeHeading(nth)[:2]),
+                            fov_vector=self._computeFovVector(nth),
+                            relative_pose=relative_position[nth][
+                                other_pose_mask.astype(bool)])
+                        obs.append(obs_nth)
+
+                self.last_obs = obs  # 这样做是由于 obs 在 step_counter == 0 可以初始化
+
+        if self.USER_DEBUG:
+            self.plot_online_stuff: dict[str, tuple[matplotlib.figure.Figure,
+                                                    matplotlib.axes.Axes]]
+            for index, mask in enumerate(self.control_by_RL_mask):
+                if mask:
+                    self.plot_online_stuff[f"gp_std_{index}"][1].imshow(
+                        X=self.decisions[index].cache["all_std"].reshape(
+                            (40, 40)),
+                        cmap='viridis',
+                        aspect='equal')
+                    self.plot_online_stuff[f"gp_pred_{index}"][1].imshow(
+                        X=self.decisions[index].cache["all_pred"].reshape(
+                            (-40, 40)),
+                        cmap='viridis',
+                        aspect='equal')
+
+            plt.pause(1e-9)
+
+        return np.asarray(self.last_obs)
 
     def _computeReward(self):
         """Computes the current reward value(s).

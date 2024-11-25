@@ -54,10 +54,7 @@ class UAVGaussian():
                                                        (1, 2)),
                                                    id=self.id)
 
-        self.all_means_list = []
-        self.all_stds_list = []
-        self.gps_means_list = []
-        self.observed_points_list = []
+        self.cache = {}  # cache
         ######### metrics
         self.last_all_std = None
         # self.metrics_obj = Metrics(**kwargs)
@@ -110,7 +107,7 @@ class UAVGaussian():
 
         # 更新 GP 参数
         self.GP_detection.update_GPs()
-        _, all_std, _ = self.GP_detection.update_grids(time)
+        all_pred, all_std, _ = self.GP_detection.update_grids(time)
 
         ##### 触发 fov 影响的采集
         # if self.kFovEffectGP and self.negitive_gather:
@@ -123,7 +120,8 @@ class UAVGaussian():
         # ##### 否则叠加最新的 fov effect
         # elif self.kFovEffectGP and len(self.all_stds_list):
         #     all_std = self.all_stds_list[-1]
-
+        self.cache["all_std"] = all_std
+        self.cache["all_pred"] = all_pred
         return all_std
 
     @property
@@ -194,7 +192,7 @@ class UAVGaussian():
             relative_pose: 其他无人机的真实位置,需不包含与自身的相对位置
         ----
         ## return:
-        action [vx,vy,yaw]
+        all_std: [1600,]
         """
         self.curr_time = curr_time
         self.ego_heading = ego_heading
