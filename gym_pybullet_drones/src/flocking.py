@@ -17,27 +17,24 @@ import os
 import time
 import argparse
 from datetime import datetime
-import pdb
-import math
-import random
 import numpy as np
 import pybullet as p
-import matplotlib.pyplot as plt
-import yaml
-
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
-from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
-
 from gym_pybullet_drones.envs.FlockingAviary import FlockingAviary
+# stable_baseline3
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
+from stable_baselines3.common.evaluation import evaluate_policy
+from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationType, FOVType
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
 DEFAULT_GUI = False  # 默认不启用 gui
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
-DEFAULT_USER_DEBUG_GUI = True
+DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = False
 DEFAULT_SIMULATION_FREQ_HZ = 120
 DEFAULT_CONTROL_FREQ_HZ = 60
@@ -46,6 +43,89 @@ DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
 DEFAULT_NUM_DRONE = 6
+
+DEFAULT_OBS_TYPE = ObservationType.GAUSSIAN
+DEFAULT_ACT_TYPE = ActionType.YAW
+DEFAULT_FOV_CONFIG = FOVType.SINGLE
+
+
+def learn(drone=DEFAULT_DRONE,
+          gui=DEFAULT_GUI,
+          num_drones=DEFAULT_NUM_DRONE,
+          record_video=DEFAULT_RECORD_VIDEO,
+          plot=DEFAULT_PLOT,
+          user_debug_gui=DEFAULT_USER_DEBUG_GUI,
+          obstacles=DEFAULT_OBSTACLES,
+          simulation_freq_hz=DEFAULT_SIMULATION_FREQ_HZ,
+          control_freq_hz=DEFAULT_CONTROL_FREQ_HZ,
+          flocking_freq_hz=10,
+          decision_freq_hz=5,
+          duration_sec=DEFAULT_DURATION_SEC,
+          output_folder=DEFAULT_OUTPUT_FOLDER,
+          default_flight_height=DEFAULT_FLIGHT_HEIGHT,
+          colab=DEFAULT_COLAB,
+          fov_config=DEFAULT_FOV_CONFIG,
+          obs=DEFAULT_OBS_TYPE,
+          act=DEFAULT_ACT_TYPE):
+
+    filename = os.path.join(
+        output_folder, 'save-' + datetime.now().strftime("%m.%d.%Y_%H.%M.%S"))
+    if not os.path.exists(filename):
+        os.makedirs(filename + "/")
+
+    # env config
+    INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
+                          for x in range(num_drones)])  # 横一字排列
+    INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
+    control_by_RL_mask = np.zeros((num_drones, ))
+    control_by_RL_mask[0] = 1
+
+    env_kwargs = dict(drone_model=drone,
+                      num_drones=num_drones,
+                      control_by_RL_mask=control_by_RL_mask.astype(bool),
+                      initial_xyzs=INIT_XYZS,
+                      initial_rpys=INIT_RPYS,
+                      pyb_freq=simulation_freq_hz,
+                      flocking_freq_hz=flocking_freq_hz,
+                      decision_freq_hz=decision_freq_hz,
+                      ctrl_freq=control_freq_hz,
+                      gui=gui,
+                      user_debug_gui=user_debug_gui,
+                      default_flight_height=default_flight_height,
+                      fov_config=fov_config,
+                      obs=obs,
+                      act=act)  # 定义 action space and observation space
+
+    train_env = make_vec_env(FlockingAviary,
+                             env_kwargs=env_kwargs,
+                             n_envs=1,
+                             seed=0)
+    eval_env = FlockingAviary(**env_kwargs)
+    #### check the environment's spaces
+    print('[INFO] Action space:', train_env.action_space)
+    print('[INFO] Observation space:', train_env.observation_space)
+
+    ### train the model
+    model = PPO('MlpPolicy',
+                train_env,
+                verbose=1,
+                tensorboard_log=filename + '/tb/')
+    callback_on_best = StopTrainingOnNoModelImprovement(
+        max_no_improvement_evals=int(1e2), min_evals=int(1e3), verbose=1)
+    callback = EvalCallback(eval_env=eval_env,
+                            callback_on_new_best=callback_on_best,
+                            verbose=1,
+                            best_model_save_path=filename + '/',
+                            log_path=filename + '/',
+                            eval_freq=int(1e3),
+                            deterministic=True,
+                            render=False)
+    model.learn(total_timesteps=int(1e7),
+                callback=callback,
+                log_interval=100,
+                progress_bar=True)
+    model.save(filename + '/final_model.zip')
+    print(filename)
 
 
 def run(drone=DEFAULT_DRONE,
