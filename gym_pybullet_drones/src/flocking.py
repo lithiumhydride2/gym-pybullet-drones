@@ -19,22 +19,26 @@ import argparse
 from datetime import datetime
 import numpy as np
 import pybullet as p
+import pdb
+import gymnasium as gym
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
+import gym_pybullet_drones.envs.FlockingAviary as flocking_aviary
+import sys
 from gym_pybullet_drones.envs.FlockingAviary import FlockingAviary
-# stable_baseline3
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
 from stable_baselines3.common.evaluation import evaluate_policy
 from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationType, FOVType
+from gymnasium.envs.registration import register
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
-DEFAULT_GUI = False  # 默认不启用 gui
+DEFAULT_GUI = True  # 默认不启用 gui
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
-DEFAULT_USER_DEBUG_GUI = False
+DEFAULT_USER_DEBUG_GUI = False  # user debug gui, 包含 gp_heatmap
 DEFAULT_OBSTACLES = False
 DEFAULT_SIMULATION_FREQ_HZ = 120
 DEFAULT_CONTROL_FREQ_HZ = 60
@@ -42,7 +46,7 @@ DEFAULT_DURATION_SEC = 30
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
-DEFAULT_NUM_DRONE = 6
+DEFAULT_NUM_DRONE = 3
 
 DEFAULT_OBS_TYPE = ObservationType.GAUSSIAN
 DEFAULT_ACT_TYPE = ActionType.YAW
@@ -95,11 +99,14 @@ def learn(drone=DEFAULT_DRONE,
                       fov_config=fov_config,
                       obs=obs,
                       act=act)  # 定义 action space and observation space
-
+    # 注册环境
     train_env = make_vec_env(FlockingAviary,
                              env_kwargs=env_kwargs,
                              n_envs=1,
                              seed=0)
+
+    # 初步 debug, eval_env 设置为无 gui
+    env_kwargs['gui'] = False
     eval_env = FlockingAviary(**env_kwargs)
     #### check the environment's spaces
     print('[INFO] Action space:', train_env.action_space)
@@ -123,7 +130,7 @@ def learn(drone=DEFAULT_DRONE,
     model.learn(total_timesteps=int(1e7),
                 callback=callback,
                 log_interval=100,
-                progress_bar=True)
+                progress_bar=False)  # TODO: 改为 True
     model.save(filename + '/final_model.zip')
     print(filename)
 
@@ -302,6 +309,8 @@ if __name__ == "__main__":
         type=bool,
         help='Whether example is being run by a notebook (default: "False")',
         metavar='')
+    # 这里需要添加 args = [] 才能使用 vscode 进行 debug
+    ARGS = parser.parse_args(args=[])
+    # run(**vars(ARGS))
 
-    ARGS = parser.parse_args()
-    run(**vars(ARGS))
+    learn(**vars(ARGS))

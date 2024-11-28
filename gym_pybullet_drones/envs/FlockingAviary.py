@@ -1,4 +1,5 @@
 import os
+import pdb
 import matplotlib
 import matplotlib.axes
 import matplotlib.figure
@@ -60,7 +61,7 @@ class FlockingAviary(BaseRLAviary):
             drone model  传入方式仅为 enum, 作为 urdf 文件的索引
         num_drones : int, optional
             The desired number of drones in the aviary.
-        control_by_RL_mask: np.ndarray:
+        control_by_RL_mask: ndistance_curr - position_mean
             in shape(num_drones,).astype(bool), 表示哪些无人机受到 decision 控制, 不受到 decision 控制的无人机具有超能力！
         neighbourhood_radius : float, optional
             Radius used to compute the drones' adjacency matrix, in meters.
@@ -140,7 +141,6 @@ class FlockingAviary(BaseRLAviary):
         self.default_flight_height = default_flight_height
         if self.use_reynolds:
             self.reynolds = Reynolds()
-        self.last_reynolds_command = None
         self.fov_range = fov_config.value
 
         ### decision
@@ -152,24 +152,27 @@ class FlockingAviary(BaseRLAviary):
                                                num_drone=num_drones,
                                                planner="tsp",
                                                enable_exploration=False)
+
         self.DECISION_FREQ_HZ = decision_freq_hz
         if self.PYB_FREQ % self.DECISION_FREQ_HZ != 0:
             raise ValueError
-        self.DECISION_PER_PYB = int(
-            self.PYB_FREQ / self.DECISION_FREQ_HZ
-        )  # 每 self.DECISION_PER_PYB 次 pyb 对应一次 decision
+        # 每 self.DECISION_PER_PYB 次 pyb 对应一次 decision
+        self.DECISION_PER_PYB = int(self.PYB_FREQ / self.DECISION_FREQ_HZ)
         if self.CTRL_FREQ % self.DECISION_FREQ_HZ != 0:
             raise ValueError
         self.DECISION_PER_CTRL = int(self.CTRL_FREQ / self.DECISION_FREQ_HZ)
+
         ######### for _preprocessAction
         self.target_vs = np.zeros((self.NUM_DRONES, 4))
         self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
-        self.target_yaw = np.zeros(
-            (self.NUM_DRONES, ))  # 将 yaw action 累加到 self.target_yaw 之上
+        # 将 yaw action 累加到 self.target_yaw 之上, 如果在 RL 模式中，为 decision 直接的输出
+        self.target_yaw = np.zeros((self.NUM_DRONES, ))
 
         ### cache
-        self.last_obs = None
-        self.last_unc = [1.0] * num_drones
+        self.cache = {}
+        self.cache['obs'] = None
+        self.cache['unc'] = [1.0] * self.NUM_DRONES
+
         ### hyper param
         self.VISABLE_DEGREE_THERSHOLD = 5  # in degree
         self.VISABLE_FAIL_DETECT = 0.05  # 5% 的概率无法检出目标
@@ -279,7 +282,7 @@ class FlockingAviary(BaseRLAviary):
         ] for ego in range(self.NUM_DRONES)])
 
         # 计算 观测 邻接矩阵
-        self.adjacencyMat = self._computeAdjacencyMatFOV()
+        adjacencyMat = self._computeAdjacencyMatFOV()
 
         #根据相对位置与 adjacencyMat 计算 reynolds 控制指令
         reynolds_commands = []
@@ -288,8 +291,8 @@ class FlockingAviary(BaseRLAviary):
         for i in range(self.NUM_DRONES):
             if self.control_by_RL_mask[i]:
                 reynolds_commands.append(
-                    self.reynolds.command(relative_position[i][
-                        self.adjacencyMat[i].astype(bool)]))
+                    self.reynolds.command(
+                        relative_position[i][adjacencyMat[i].astype(bool)]))
                 # 这里考虑替换 带噪声的 位置估计
             else:
                 reynolds_commands.append(
@@ -300,12 +303,13 @@ class FlockingAviary(BaseRLAviary):
                 # 如果不需要超能力 relative_position[i][self.adjacencyMat[i].astype(bool)]
         reynolds_commands = np.array(reynolds_commands)
 
-        if self.last_reynolds_command is None:
-            self.last_reynolds_command = reynolds_commands
+        if self.cache.get("reynolds_command", None) is None:
+            self.cache["reynolds_command"] = reynolds_commands
 
-        reynolds_commands = self.last_reynolds_command * smooth_factor + reynolds_commands * (
-            1 - smooth_factor)
-        self.last_reynolds_command = reynolds_commands  # 更新历史信息
+        reynolds_commands = self.cache[
+            "reynolds_command"] * smooth_factor + reynolds_commands * (
+                1 - smooth_factor)
+        self.cache["reynolds_command"] = reynolds_commands  # 更新历史信息
 
         # 添加z轴，将z轴reynolds_command 设置为0
         reynolds_commands = np.hstack(
@@ -313,14 +317,19 @@ class FlockingAviary(BaseRLAviary):
         assert reynolds_commands.shape == (self.NUM_DRONES, 3)
         return reynolds_commands
 
-    def _get_command_migration(self):
+    def _get_command_migration(self, migration_mask=None):
         '''
+            将 migration_mask 为 true 的位置 migration 置 0
         '''
-
         drone_poses = self.drone_states[:, 0:3]
         # z 轴速度不考虑
         drone_poses[:, 2] = 0
-        return self.reynolds.get_migration_command(drone_poses)
+        migration_command = self.reynolds.get_migration_command(drone_poses)
+        if migration_mask is not None:
+            migration_command[migration_mask] = np.zeros_like(
+                migration_command[migration_mask])  # 置0
+
+        return migration_command
 
     ################################################################################
     def _computePositionEstimation(self, AdjacencyMat, nth_drone):
@@ -473,6 +482,30 @@ class FlockingAviary(BaseRLAviary):
             [self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
 
     ################################################################################
+    def reset(self, seed=None, options=None):
+
+        # house_kepping of flocking aviary
+        self.decisions = {}
+        for nth, mask in enumerate(self.control_by_RL_mask):
+            if mask:
+                self.decisions[nth] = decision(fov_range=self.fov_range,
+                                               nth_drone=nth,
+                                               num_drone=self.NUM_DRONES,
+                                               planner="tsp",
+                                               enable_exploration=False)
+
+        ######### for _preprocessAction
+        self.target_vs = np.zeros((self.NUM_DRONES, 4))
+        self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
+        self.target_yaw = np.zeros((self.NUM_DRONES, ))
+        self.reynolds = Reynolds()
+
+        ### cache
+        self.cache = {}
+        self.cache['obs'] = None
+        self.cache['unc'] = [1.0] * self.NUM_DRONES
+        return super().reset(seed, options)
+
     def step(self, action):
         '''
         This step in frequency of self.DECISION_FREQ_HZ
@@ -511,6 +544,14 @@ class FlockingAviary(BaseRLAviary):
         return super().step(action)
 
     ################################################################################
+    @property
+    def drone_states(self):
+        if self.cache.get("last_state_step", -1) != self.step_counter:
+            self.cache["last_state_step"] = self.step_counter
+            self.cache["drone_states"] = self._computeDroneState()
+        # 在 step_counter 没有得到更新时， 返回cache内容
+        return self.cache["drone_states"]
+
     def _preprocessAction(self, action):
         """
         使用 PID 控制将 action 转化为 RPM, yaw_action 后续也应该从此处产生 
@@ -518,12 +559,11 @@ class FlockingAviary(BaseRLAviary):
         Pre-processes the action passed to `.step()` into motors' RPMs.
         Descriptions:
             此处嵌套了 reynolds 用来计算高层速度控制指令
-            self.drone_states 在此处得到更新
 
         Parameters
         ----------
         action : ndarray
-            The desired target_yaw [px, py, pz, factor_v, target_yaw], to be translated into RPMs.
+            The desired target_yaw $$[cos(\theta), sin(\theta)]$$, to be translated into RPMs.
 
         Returns
         -------
@@ -532,23 +572,28 @@ class FlockingAviary(BaseRLAviary):
             commanded to the 4 motors of each drone.
 
         """
-        self.drone_states = self._computeDroneState()
-
         if self.step_counter % self.FLOCKING_PER_PYB == 0:
             #### 更新 flocking 控制指令
+            # migration mask 为 control mask 取反
             flocking_command = self._get_command_migration(
+                migration_mask=self.control_by_RL_mask
             ) + self._get_command_reynolds()
             command_norm = np.linalg.norm(flocking_command,
                                           axis=1,
                                           keepdims=True)
-            flocking_command = flocking_command / command_norm
+            command_norm_safe = np.where(command_norm < 1e-10, 1, command_norm)
+            flocking_command = flocking_command / command_norm_safe
+            # 避免除0
             self.target_vs = np.hstack(
                 (flocking_command,
                  np.min((np.ones(
                      command_norm.shape), command_norm / self.SPEED_LIMIT),
                         axis=0)))  # 将最大速度限制在 speed_limit
 
-        target_yaws = circle_to_yaw(action)
+        action_all = np.zeros((self.NUM_DRONES, 2), dtype=np.float32)
+        # 将对于 control_by_RL_mask 决策的 action 嵌入 action_all
+        action_all[self.control_by_RL_mask] = action
+        target_yaws = circle_to_yaw(action_all)
         return self._computeRpmFromCommand(self.target_vs, target_yaws)
 
     def _computeRpmFromCommand(self, target_vs, target_yaws):
@@ -617,8 +662,9 @@ class FlockingAviary(BaseRLAviary):
                             relative_pose=relative_position[nth][
                                 other_pose_mask.astype(bool)])
                         obs.append(obs_nth)
-
-                self.last_obs = obs  # 这样做是由于 obs 在 step_counter == 0 可以初始化
+                # 这样做是由于 obs 在 step_counter == 0 可以初始化
+                self.cache['obs'] = np.array(obs[0]).reshape(1, 1600).astype(
+                    np.float32)
 
         if self.USER_DEBUG:
             self.plot_online_stuff: dict[str, tuple[matplotlib.figure.Figure,
@@ -635,10 +681,9 @@ class FlockingAviary(BaseRLAviary):
                             (-40, 40)),
                         cmap='viridis',
                         aspect='equal')
-
             plt.pause(1e-9)
 
-        return np.asarray(self.last_obs)
+        return np.asarray(self.cache['obs'])
 
     def _computeReward(self):
         """Computes the current reward value(s).
@@ -661,9 +706,10 @@ class FlockingAviary(BaseRLAviary):
                 _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
                     self._getCurrTime, high_info_idx, return_all=True)
 
-                unc_update = np.array(self.last_unc[nth]) - np.array(unc_list)
+                unc_update = np.array(
+                    self.cache['unc'][nth]) - np.array(unc_list)
                 reward = np.sum(unc_update[unc_update > .0])
-                self.last_unc[nth] = unc_list
+                self.cache['unc'][nth] = unc_list
                 return reward
 
             reward = np.zeros((self.NUM_DRONES, ))
@@ -671,7 +717,7 @@ class FlockingAviary(BaseRLAviary):
                 if mask:
                     reward[nth] = compute_reward(nth)
 
-            return np.sum(reward)
+            return np.sum(reward).astype(float)
 
     ################################################################################
 
@@ -686,6 +732,10 @@ class FlockingAviary(BaseRLAviary):
             Dummy value.
 
         """
+        if np.all(
+                np.linalg.norm(self.target_vs, axis=1, keepdims=True) < 1e-4):
+
+            return True  # 不名原因速度消失
         return False
 
     ################################################################################

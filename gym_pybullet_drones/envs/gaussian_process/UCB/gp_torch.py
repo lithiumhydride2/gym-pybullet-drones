@@ -111,7 +111,7 @@ class GaussianProcessRegressorTorch(gpytorch.models.ExactGP):
                                           transform=None,
                                           inv_transform=None))
         # 设置 dtype
-        torch.set_default_dtype(torch.float64)
+        # 这里会对其他 pytorch 产生影响
 
     def forward(self, x):
         mean_x = self.mean_module(x)

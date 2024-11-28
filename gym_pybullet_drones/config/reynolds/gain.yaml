@@ -1,4 +1,4 @@
-smoothing_factor: 0.3
+smoothing_factor: 0.2
 separation_gain: 7.0
 cohesion_gain: 1.0
 alignment_gain: 0.0

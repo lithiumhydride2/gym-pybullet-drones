@@ -339,7 +339,7 @@ class GaussianProcessWrapper:
                 for other in self.other_list
             ]
         else:
-            self.GPs: list[GaussianProcess] = [
+            self.GPs = [
                 GaussianProcess(
                     node_coords=node_coords,
                     adaptive_kernel=False,

@@ -61,15 +61,17 @@ class Reynolds():
 
         position_mean = np.mean(positions, axis=0)
         distance_curr = np.linalg.norm(position_mean[:2] - curr_waypoint[:2])
+        self.distance_curr = distance_curr
         if distance_curr <= self.acceptance_radius:
             print(
                 f"[INFO] Arrived waypoint {self.curr_waypoint_index}, and to next."
             )
             self.curr_waypoint_index += 1
         else:
-            print(
-                f"[INFO] Arrive Point {self.curr_waypoint_index} with error {distance_curr}."
-            )
+            pass
+            # print(
+            #     f"[INFO] Arrive Point {self.curr_waypoint_index} with error {distance_curr}."
+            # )
         num_drones = positions.shape[0]
 
         # TODO: 此处实际有一个坐标变换，还需要考虑坐标变换， 先未考虑旋转
