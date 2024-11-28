@@ -24,18 +24,17 @@ import gymnasium as gym
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
-import gym_pybullet_drones.envs.FlockingAviary as flocking_aviary
-import sys
 from gym_pybullet_drones.envs.FlockingAviary import FlockingAviary
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
+from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.evaluation import evaluate_policy
 from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationType, FOVType
 from gymnasium.envs.registration import register
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
-DEFAULT_GUI = True  # 默认不启用 gui
+DEFAULT_GUI = False  # 默认不启用 gui
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
 DEFAULT_USER_DEBUG_GUI = False  # user debug gui, 包含 gp_heatmap
@@ -99,15 +98,15 @@ def learn(drone=DEFAULT_DRONE,
                       fov_config=fov_config,
                       obs=obs,
                       act=act)  # 定义 action space and observation space
-    # 注册环境
+
     train_env = make_vec_env(FlockingAviary,
                              env_kwargs=env_kwargs,
                              n_envs=1,
                              seed=0)
-
     # 初步 debug, eval_env 设置为无 gui
     env_kwargs['gui'] = False
-    eval_env = FlockingAviary(**env_kwargs)
+    eval_env = Monitor(FlockingAviary(**env_kwargs))
+
     #### check the environment's spaces
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)
@@ -119,6 +118,7 @@ def learn(drone=DEFAULT_DRONE,
                 tensorboard_log=filename + '/tb/')
     callback_on_best = StopTrainingOnNoModelImprovement(
         max_no_improvement_evals=int(1e2), min_evals=int(1e3), verbose=1)
+
     callback = EvalCallback(eval_env=eval_env,
                             callback_on_new_best=callback_on_best,
                             verbose=1,
@@ -127,10 +127,11 @@ def learn(drone=DEFAULT_DRONE,
                             eval_freq=int(1e3),
                             deterministic=True,
                             render=False)
-    model.learn(total_timesteps=int(1e7),
+
+    model.learn(total_timesteps=int(1e5),
                 callback=callback,
                 log_interval=100,
-                progress_bar=False)  # TODO: 改为 True
+                progress_bar=True)  # TODO: 改为 True
     model.save(filename + '/final_model.zip')
     print(filename)
 

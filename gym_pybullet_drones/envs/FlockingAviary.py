@@ -717,6 +717,7 @@ class FlockingAviary(BaseRLAviary):
                 if mask:
                     reward[nth] = compute_reward(nth)
 
+            # 惩罚较大 action
             return np.sum(reward).astype(float)
 
     ################################################################################
@@ -732,9 +733,8 @@ class FlockingAviary(BaseRLAviary):
             Dummy value.
 
         """
-        if np.all(
-                np.linalg.norm(self.target_vs, axis=1, keepdims=True) < 1e-4):
-
+        # 这里 target_vs 的最后一项为 norm
+        if np.all(np.abs(self.target_vs[:, -1]) < 1e-3):
             return True  # 不名原因速度消失
         return False
 
@@ -765,6 +765,7 @@ class FlockingAviary(BaseRLAviary):
             if abs(drone_states[nth][7]) > .4 or abs(
                     drone_states[nth][8]) > .4:
                 return True
+            # truncate when to large ang_v 13,14,15
             return False
 
         for idx, mask in enumerate(self.control_by_RL_mask):

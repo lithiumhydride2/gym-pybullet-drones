@@ -43,10 +43,8 @@ ImportError: attempted relative import with no known parent package
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash
-发生异常: SystemExit       (note: full exception trace is shown but execution is paused at: <module>)
-2
-  File "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/flocking.py", line 313, in <module> (Current frame)
-    ARGS = parser.parse_args()
-SystemExit: 2
+# set python path
+export PYTHONPATH=/home/lih/fromgit/gym-pybullet-drones:$PYTHONPATH
+echo set python path for flocking aviary done!
 
 ```

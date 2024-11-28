@@ -10,10 +10,13 @@ class Reynolds():
 
     def __init__(self,
                  config_file: str = "../config/reynolds/gain.yaml",
-                 waypoint_name: str = "square"):
+                 waypoint_name: str = "square",
+                 random_range=[-10, 10]):
         '''
         Args:
             config_file: config 存放的路径
+            waypoint_name: name of way_point
+            random_range: 随机采样航路点的范围
         '''
         script_dir = os.path.dirname(os.path.abspath(__file__))
         file_name = os.path.join(script_dir, config_file)
@@ -32,6 +35,8 @@ class Reynolds():
             self.waypoints = yaml.load(f, yaml.FullLoader)
 
         self.curr_waypoint_index = 0
+        self.last_waypoint_index = -1
+        self.random_range = random_range
 
     def command(self, positions, velocities=None):
         '''
@@ -46,38 +51,42 @@ class Reynolds():
                                          self.perception_radius)
         return curr_command
 
-    def get_migration_command(self, positions):
+    def get_migration_command(self, positions, random=True):
         '''
         Args:
             positions: 当前所有无人机的位置
+            random: if True, 随机选取航点
         '''
-        if self.curr_waypoint_index == len(self.waypoints):
-            self.curr_waypoint_index = 0  # 开始循环
-        curr_waypoint = self.waypoints[self.curr_waypoint_index]
-        # 将 z 轴设置为0
-        curr_waypoint = np.array(
-            [curr_waypoint.get("x", 0.0),
-             curr_waypoint.get("y", 0.0), 0])
+        if random:
+            # update curr_waypoint
+            if self.curr_waypoint_index != self.last_waypoint_index:
+                self.last_waypoint_index = self.curr_waypoint_index
+                self.curr_waypoint = np.random.uniform(self.random_range[0],
+                                                       self.random_range[1],
+                                                       size=(3, ))
+                self.curr_waypoint[2] = 0  # z 轴置 0
+        else:
+            if self.curr_waypoint_index == len(self.waypoints):
+                self.curr_waypoint_index = 0  # 开始循环
+            curr_waypoint = self.waypoints[self.curr_waypoint_index]
+            # 将 z 轴设置为0
+            self.curr_waypoint = np.array(
+                [curr_waypoint.get("x", 0.0),
+                 curr_waypoint.get("y", 0.0), 0])
 
         position_mean = np.mean(positions, axis=0)
-        distance_curr = np.linalg.norm(position_mean[:2] - curr_waypoint[:2])
-        self.distance_curr = distance_curr
+        distance_curr = np.linalg.norm(position_mean[:2] -
+                                       self.curr_waypoint[:2])
         if distance_curr <= self.acceptance_radius:
-            print(
-                f"[INFO] Arrived waypoint {self.curr_waypoint_index}, and to next."
-            )
-            self.curr_waypoint_index += 1
-        else:
-            pass
             # print(
-            #     f"[INFO] Arrive Point {self.curr_waypoint_index} with error {distance_curr}."
+            #     f"[INFO] Arrived waypoint {self.curr_waypoint_index}, and to next."
             # )
-        num_drones = positions.shape[0]
+            self.curr_waypoint_index += 1
 
-        # TODO: 此处实际有一个坐标变换，还需要考虑坐标变换， 先未考虑旋转
+        num_drones = positions.shape[0]
         migration_command = np.array([
-            (curr_waypoint - positions[i]) /
-            np.linalg.norm(curr_waypoint - positions[i])
+            (self.curr_waypoint - positions[i]) /
+            np.linalg.norm(self.curr_waypoint - positions[i])
             for i in range(num_drones)
         ])
         return migration_command * self.migration_gain
