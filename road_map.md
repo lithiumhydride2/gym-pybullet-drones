@@ -15,30 +15,29 @@ state = np.hstack([
             self.ang_v[nth_drone, :], self.last_clipped_action[nth_drone, :]
         ])
 ```
-# TODO LIST
-
-- [x] 需要在 flocking_aviary 中将 ctrl_freq 和 decision_freq 分离开来，因为 BaseAviary 中 step() 是按照 ctrl_freq 调用的
+# utils
 
 - [x] 性能分析 https://blog.csdn.net/weixin_40583722/article/details/121659851
 ```bash
 python -m cProfile -o flame_of_flocking.prof flocking.py
 flameprof flame_of_flocking.prof > flame_of_flocking.svg
 ```
+- [x] 使用tensorboard
+```bash
+tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/
+```
+# TODO LIST
 
+- [x] 需要在 flocking_aviary 中将 ctrl_freq 和 decision_freq 分离开来，因为 BaseAviary 中 step() 是按照 ctrl_freq 调用的
 - [x] 计算 gaussian_process 需要的计算压力太大了， 需要提高运算速度， 考虑使用 `GPyTorch`
     - 使用了 GPyTorch, 将运行速度提升了 5 倍
 - [x] 考虑使用 方位测量 和 距离测量进行替代, 这样的 reward 似乎难以设计
 - [x] 使 control_by_RL_mask 的无人机无法接受迁移控制指令
 - [] 考虑如何设计 reward function， 是否把对 angular speed 的幅度限制加入 _computeTerminated()
 
-```
-Traceback (most recent call last):
-  File "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/flocking.py", line 32, in <module>
-    from ..envs.FlockingAviary import FlockingAviary
-ImportError: attempted relative import with no known parent package
-```
-
-
+### 几点初步设计思路
+- [] 当前 control by RL 的无人机无法获取迁移指令？ 这合理吗，容易在初期丢失目标造成 terminated (这是在 eval 时观察的情况)
+- [] reward 完全无法得到收敛，动作空间的设计方式是否有问题！
 
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：

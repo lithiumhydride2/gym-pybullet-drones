@@ -11,11 +11,13 @@ class Reynolds():
     def __init__(self,
                  config_file: str = "../config/reynolds/gain.yaml",
                  waypoint_name: str = "square",
+                 random_point=True,
                  random_range=[-10, 10]):
         '''
         Args:
             config_file: config 存放的路径
             waypoint_name: name of way_point
+            random_point: 是否使用 随机航路店
             random_range: 随机采样航路点的范围
         '''
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +39,7 @@ class Reynolds():
         self.curr_waypoint_index = 0
         self.last_waypoint_index = -1
         self.random_range = random_range
+        self.random_point = random_point
 
     def command(self, positions, velocities=None):
         '''
@@ -51,13 +54,13 @@ class Reynolds():
                                          self.perception_radius)
         return curr_command
 
-    def get_migration_command(self, positions, random=True):
+    def get_migration_command(self, positions):
         '''
         Args:
             positions: 当前所有无人机的位置
             random: if True, 随机选取航点
         '''
-        if random:
+        if self.random_point:
             # update curr_waypoint
             if self.curr_waypoint_index != self.last_waypoint_index:
                 self.last_waypoint_index = self.curr_waypoint_index

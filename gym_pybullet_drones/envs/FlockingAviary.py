@@ -51,7 +51,8 @@ class FlockingAviary(BaseRLAviary):
                  output_folder='results',
                  fov_config: FOVType = FOVType.SINGLE,
                  obs: ObservationType = ObservationType.GAUSSIAN,
-                 act: ActionType = ActionType.YAW):
+                 act: ActionType = ActionType.YAW,
+                 random_point=True):
         """Initialization of an aviary environment for or high-level planning.
 
         Parameters
@@ -95,6 +96,8 @@ class FlockingAviary(BaseRLAviary):
             The type of observation space
         act: ActionType
             The type of action space
+        random_point:
+            if use random_point in Reynolds command
         """
         #### Create integrated controllers #########################
         os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'  # 和某个并行运算库相关
@@ -139,8 +142,9 @@ class FlockingAviary(BaseRLAviary):
         self.FLOCKING_PER_PYB = int(self.PYB_FREQ / self.FLOCKING_FREQ_HZ)
         self.use_reynolds = use_reynolds
         self.default_flight_height = default_flight_height
+        self.RANDOM_POINT = random_point
         if self.use_reynolds:
-            self.reynolds = Reynolds()
+            self.reynolds = Reynolds(random_point=self.RANDOM_POINT)
         self.fov_range = fov_config.value
 
         ### decision
@@ -498,7 +502,7 @@ class FlockingAviary(BaseRLAviary):
         self.target_vs = np.zeros((self.NUM_DRONES, 4))
         self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
         self.target_yaw = np.zeros((self.NUM_DRONES, ))
-        self.reynolds = Reynolds()
+        self.reynolds = Reynolds(random_point=self.RANDOM_POINT)
 
         ### cache
         self.cache = {}

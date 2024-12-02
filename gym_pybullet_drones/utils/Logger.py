@@ -314,6 +314,9 @@ class Logger(object):
         fig.savefig(fname=self.save_templete.format("yaw", dpi=600))
 
     def plot_traj(self):
+        '''
+            plot traj 中包含了 所有的绘制内容
+        '''
         ### 这里所有的数据都是以 npy 格式存储的， 若想要进行绘制， 应当对原有代码作适当转换
         plt.close("all")
         self.__set_plot()

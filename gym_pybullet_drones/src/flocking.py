@@ -34,7 +34,7 @@ from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationT
 from gymnasium.envs.registration import register
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
-DEFAULT_GUI = False  # 默认不启用 gui
+DEFAULT_GUI = True  # 默认不启用 gui
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
 DEFAULT_USER_DEBUG_GUI = False  # user debug gui, 包含 gp_heatmap
@@ -45,11 +45,14 @@ DEFAULT_DURATION_SEC = 30
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
-DEFAULT_NUM_DRONE = 3
+DEFAULT_NUM_DRONE = 4
 
 DEFAULT_OBS_TYPE = ObservationType.GAUSSIAN
 DEFAULT_ACT_TYPE = ActionType.YAW
 DEFAULT_FOV_CONFIG = FOVType.SINGLE
+
+DEFAULT_FLOCKING_FREQ = 10
+DEFAULT_DECISION_FREQ = 5
 
 
 def learn(drone=DEFAULT_DRONE,
@@ -61,8 +64,8 @@ def learn(drone=DEFAULT_DRONE,
           obstacles=DEFAULT_OBSTACLES,
           simulation_freq_hz=DEFAULT_SIMULATION_FREQ_HZ,
           control_freq_hz=DEFAULT_CONTROL_FREQ_HZ,
-          flocking_freq_hz=10,
-          decision_freq_hz=5,
+          flocking_freq_hz=DEFAULT_FLOCKING_FREQ,
+          decision_freq_hz=DEFAULT_DECISION_FREQ,
           duration_sec=DEFAULT_DURATION_SEC,
           output_folder=DEFAULT_OUTPUT_FOLDER,
           default_flight_height=DEFAULT_FLIGHT_HEIGHT,
@@ -128,7 +131,7 @@ def learn(drone=DEFAULT_DRONE,
                             deterministic=True,
                             render=False)
 
-    model.learn(total_timesteps=int(1e5),
+    model.learn(total_timesteps=int(1e6),
                 callback=callback,
                 log_interval=100,
                 progress_bar=True)  # TODO: 改为 True
