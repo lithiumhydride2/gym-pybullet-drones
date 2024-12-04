@@ -706,7 +706,6 @@ class FlockingAviary(BaseRLAviary):
                 pred_array = self.decisions[index].cache["all_pred"].reshape(
                     (40, 40))
 
-                print(self.plot_online_stuff[f"gp_pred_{index}"])
                 self.plot_online_stuff[f"gp_std_{index}"][2].set_array(
                     std_array)
                 self.plot_online_stuff[f"gp_pred_{index}"][2].set_array(
