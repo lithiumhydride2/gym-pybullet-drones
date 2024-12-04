@@ -96,8 +96,11 @@ class GaussianProcessTorch():
 class GaussianProcessRegressorTorch(gpytorch.models.ExactGP):
 
     def __init__(self, train_inputs, train_targets):
-        likelihood = gpytorch.likelihoods.GaussianLikelihood().cuda()
-
+        likelihood = gpytorch.likelihoods.GaussianLikelihood(
+            noise_constraint=gpytorch.constraints.GreaterThan(1e-11)).cuda()
+        # default noise of sklearn gaussian process
+        likelihood.noise_covar.noise = torch.tensor(1e-10).cuda()
+        likelihood.noise_covar.raw_noise.requires_grad = False
         super().__init__(train_inputs, train_targets, likelihood)
         self.likelihood = likelihood
         self.mean_module = gpytorch.means.ZeroMean()
@@ -118,6 +121,7 @@ class GaussianProcessRegressorTorch(gpytorch.models.ExactGP):
     def forward(self, x):
         mean_x = self.mean_module(x)
         covar_x = self.covar_module(x)
+
         return gpytorch.distributions.MultivariateNormal(mean_x,
                                                          covar_x,
                                                          validate_args=True)
