@@ -37,7 +37,7 @@ DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
 DEFAULT_GUI = True  # 默认不启用 gui
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
-DEFAULT_USER_DEBUG_GUI = False  # user debug gui, 包含 gp_heatmap
+DEFAULT_USER_DEBUG_GUI = True  # user debug gui, 包含 gp_heatmap
 DEFAULT_OBSTACLES = False
 DEFAULT_SIMULATION_FREQ_HZ = 120
 DEFAULT_CONTROL_FREQ_HZ = 60
@@ -106,10 +106,11 @@ def learn(drone=DEFAULT_DRONE,
                              env_kwargs=env_kwargs,
                              n_envs=1,
                              seed=0)
-    # 初步 debug, eval_env 设置为无 gui
+
+    # 这里 train_env 和 eval_env 的 pyplot 可能会发生冲突
+    env_kwargs['user_debug_gui'] = False
     env_kwargs['gui'] = False
     eval_env = Monitor(FlockingAviary(**env_kwargs))
-
     #### check the environment's spaces
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)
@@ -119,6 +120,7 @@ def learn(drone=DEFAULT_DRONE,
                 train_env,
                 verbose=1,
                 tensorboard_log=filename + '/tb/')
+
     callback_on_best = StopTrainingOnNoModelImprovement(
         max_no_improvement_evals=int(1e2), min_evals=int(1e3), verbose=1)
 

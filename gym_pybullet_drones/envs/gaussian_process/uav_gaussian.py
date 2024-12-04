@@ -54,7 +54,7 @@ class UAVGaussian():
                                                        (1, 2)),
                                                    id=self.id)
 
-        self.cache = {}  # cache
+        self.cache: dict[str, np.ndarray] = {}  # cache
         ######### metrics
         self.last_all_std = None
         # self.metrics_obj = Metrics(**kwargs)

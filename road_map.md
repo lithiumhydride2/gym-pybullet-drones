@@ -34,10 +34,12 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [x] 考虑使用 方位测量 和 距离测量进行替代, 这样的 reward 似乎难以设计
 - [x] 使 control_by_RL_mask 的无人机无法接受迁移控制指令
 - [] 考虑如何设计 reward function， 是否把对 angular speed 的幅度限制加入 _computeTerminated()
+- [] 为 gptorch 添加数据的归一化与反归一化，现在 gpytorch 的行为与 sklearn 差异过大
 
 ### 几点初步设计思路
 - [] 当前 control by RL 的无人机无法获取迁移指令？ 这合理吗，容易在初期丢失目标造成 terminated (这是在 eval 时观察的情况)
 - [] reward 完全无法得到收敛，动作空间的设计方式是否有问题！
+- [] 考虑应当模仿图的离散化，重新设计action_space更小
 
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：

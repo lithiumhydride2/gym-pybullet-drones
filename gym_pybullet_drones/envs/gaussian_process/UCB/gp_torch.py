@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from itertools import product
 from gym_pybullet_drones.utils.utils import *
+from sklearn.preprocessing import StandardScaler
 
 
 class GaussianProcessTorch():
@@ -72,8 +73,11 @@ class GaussianProcessTorch():
         self.curr_t = t
         gird_with_t = torch.from_numpy(add_t(self.grid, t)).to(self.device)
         predict_grid = self.gp_torch.predict(gird_with_t)
-        self.cache["y_pred_at_grid"] = predict_grid.mean.cpu().detach().numpy()
-        self.cache["std_at_grid"] = predict_grid.stddev.cpu().detach().numpy()
+        mean = predict_grid.mean.cpu().detach().numpy()
+        std = predict_grid.stddev.cpu().detach().numpy()
+
+        self.cache["y_pred_at_grid"] = mean
+        self.cache["std_at_grid"] = std
         return self.cache["y_pred_at_grid"], self.cache["std_at_grid"]
 
     def evaluate_unc(self, idx=None, t=None):
@@ -93,30 +97,30 @@ class GaussianProcessRegressorTorch(gpytorch.models.ExactGP):
 
     def __init__(self, train_inputs, train_targets):
         likelihood = gpytorch.likelihoods.GaussianLikelihood().cuda()
+
         super().__init__(train_inputs, train_targets, likelihood)
         self.likelihood = likelihood
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.MaternKernel(nu=1.5, ard_num_dims=3))  # x,y,time
-
+        self.mean_module = gpytorch.means.ZeroMean()
+        self.covar_module = gpytorch.kernels.MaternKernel(nu=1.5,
+                                                          ard_num_dims=3)
         # 固定核参数
-        self.covar_module.base_kernel.raw_lengthscale = torch.nn.Parameter(
+        self.covar_module.raw_lengthscale = torch.nn.Parameter(
             torch.tensor([0.1, 0.1, 3]), requires_grad=False)
-        for param in self.covar_module.base_kernel.parameters():
+        for param in self.covar_module.parameters():
             param.requires_grad = False
-        self.covar_module.base_kernel.register_constraint(
+        self.covar_module.register_constraint(
             "raw_lengthscale",
             gpytorch.constraints.Interval(0.1,
                                           3,
                                           transform=None,
                                           inv_transform=None))
-        # 设置 dtype
-        # 这里会对其他 pytorch 产生影响
 
     def forward(self, x):
         mean_x = self.mean_module(x)
         covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+        return gpytorch.distributions.MultivariateNormal(mean_x,
+                                                         covar_x,
+                                                         validate_args=True)
 
     def fit(self, train_x, train_y, verbose=False):
         self.train()
@@ -144,5 +148,6 @@ class GaussianProcessRegressorTorch(gpytorch.models.ExactGP):
         # 清空训练数据，禁用联合推断
         self.set_train_data(inputs=None, targets=None, strict=False)
         with torch.no_grad(), gpytorch.settings.fast_pred_var():
-            observed_pred = self.likelihood(self(x))
+            t = self(x)
+            observed_pred = self.likelihood(t)
         return observed_pred

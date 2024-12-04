@@ -2,7 +2,9 @@ import os
 import pdb
 import matplotlib
 import matplotlib.axes
+import matplotlib.collections
 import matplotlib.figure
+import matplotlib.pyplot
 import numpy as np
 from gymnasium import spaces
 from functools import lru_cache
@@ -14,7 +16,6 @@ from gym_pybullet_drones.control.Reynolds import Reynolds
 from gym_pybullet_drones.envs.gaussian_process.uav_gaussian import UAVGaussian as decision
 from scipy.spatial.transform import Rotation as R
 from gym_pybullet_drones.utils.utils import *
-from matplotlib import animation
 import matplotlib.pyplot as plt
 
 
@@ -108,10 +109,12 @@ class FlockingAviary(BaseRLAviary):
             self.ctrl = [
                 DSLPIDControl(drone_model=DroneModel.CF2X
                               )  # 此处 vswarm_quad 是套壳的 cf2x ，因此使用 cf2x 的控制方法
-                for i in range(num_drones)
+                for _ in range(num_drones)
             ]
         self.control_by_RL_mask = control_by_RL_mask
-
+        self.control_by_RL_ID = np.array(
+            list(range(0,
+                       num_drones)), dtype=np.int32)[self.control_by_RL_mask]
         ### position estimation error level #####
         self.position_noise_std = [0.11, 0.16, 0.22, 0.31, 0.42, 0.50, 0.60]
 
@@ -149,13 +152,12 @@ class FlockingAviary(BaseRLAviary):
 
         ### decision
         self.decisions = {}
-        for nth, mask in enumerate(control_by_RL_mask):
-            if mask:
-                self.decisions[nth] = decision(fov_range=self.fov_range,
-                                               nth_drone=nth,
-                                               num_drone=num_drones,
-                                               planner="tsp",
-                                               enable_exploration=False)
+        for nth in self.control_by_RL_ID:
+            self.decisions[nth] = decision(fov_range=self.fov_range,
+                                           nth_drone=nth,
+                                           num_drone=num_drones,
+                                           planner="tsp",
+                                           enable_exploration=False)
 
         self.DECISION_FREQ_HZ = decision_freq_hz
         if self.PYB_FREQ % self.DECISION_FREQ_HZ != 0:
@@ -184,21 +186,44 @@ class FlockingAviary(BaseRLAviary):
 
     ################################################################################
     def _gp_debug_init(self, user_debug_gui):
+
         self.plot_online_stuff = {}
+        self.plot_online_stuff: dict[str,
+                                     tuple[matplotlib.figure.Figure,
+                                           matplotlib.axes.Axes,
+                                           matplotlib.collections.QuadMesh]]
+
+        # 获取 gird_xx 和 grid_yy 进行 plot
+        grid_size = self.decisions[
+            self.control_by_RL_ID[0]].GP_ground_truth.grid_size
+        self.grid_xx = self.decisions[
+            self.control_by_RL_ID[0]].GP_ground_truth.grid[:, 0].reshape(
+                (grid_size, grid_size))
+        self.grid_yy = self.decisions[
+            self.control_by_RL_ID[0]].GP_ground_truth.grid[:, 1].reshape(
+                grid_size, grid_size)
 
         def init_animation(name, figsize=[5, 5]):
-            figure = plt.figure(num=name, figsize=figsize)
-            ax = plt.axes()
-            return figure, ax
+            figure, ax = plt.subplots(num=name, figsize=figsize)
+            ax: matplotlib.axes.Axes
+            ax.set_xlim(-1, 1)
+            ax.set_ylim(-1, 1)
+            ax.set_title(name)
+            quadmesh = ax.pcolormesh(self.grid_xx,
+                                     self.grid_yy,
+                                     np.random.random((40, 40)),
+                                     shading='auto',
+                                     vmin=0,
+                                     vmax=1)
+
+            return figure, ax, quadmesh
 
         if user_debug_gui:
-            for index, mask in enumerate(self.control_by_RL_mask):
-                if mask:
-                    self.plot_online_stuff[f"gp_std_{index}"] = init_animation(
-                        f"gp_std_{index}")
-                    self.plot_online_stuff[
-                        f"gp_pred_{index}"] = init_animation(
-                            f"gp_pred_{index}")
+            for index in self.control_by_RL_ID:
+                self.plot_online_stuff[f"gp_std_{index}"] = init_animation(
+                    f"gp_std_{index}")
+                self.plot_online_stuff[f"gp_pred_{index}"] = init_animation(
+                    f"gp_pred_{index}")
 
     def _actionSpace(self):
         """Returns the action space of the environment.
@@ -459,11 +484,10 @@ class FlockingAviary(BaseRLAviary):
         if self.step_counter % self.DECISION_PER_PYB == 0:
             yaw_action = np.zeros((self.NUM_DRONES, ))
             obs_index = 0
-            for nth, mask in enumerate(self.control_by_RL_mask):
-                if mask:
-                    yaw_action[nth] = self.decisions[nth].DecisionStep(
-                        obs[obs_index])
-                    obs_index += 1
+            for nth in self.control_by_RL_ID:
+                yaw_action[nth] = self.decisions[nth].DecisionStep(
+                    obs[obs_index])
+                obs_index += 1
             self.target_yaw = self.target_yaw + yaw_action
             self.target_yaw_circle = yaw_to_circle(self.target_yaw)
         # if not, return last decision
@@ -487,16 +511,22 @@ class FlockingAviary(BaseRLAviary):
 
     ################################################################################
     def reset(self, seed=None, options=None):
-
+        # 重新初始化控制器
+        if self.DRONE_MODEL in [
+                DroneModel.CF2X, DroneModel.CF2P, DroneModel.VSWARM_QUAD
+        ]:
+            self.ctrl = [
+                DSLPIDControl(drone_model=DroneModel.CF2X)
+                for _ in range(self.NUM_DRONES)
+            ]
         # house_kepping of flocking aviary
         self.decisions = {}
-        for nth, mask in enumerate(self.control_by_RL_mask):
-            if mask:
-                self.decisions[nth] = decision(fov_range=self.fov_range,
-                                               nth_drone=nth,
-                                               num_drone=self.NUM_DRONES,
-                                               planner="tsp",
-                                               enable_exploration=False)
+        for nth in self.control_by_RL_ID:
+            self.decisions[nth] = decision(fov_range=self.fov_range,
+                                           nth_drone=nth,
+                                           num_drone=self.NUM_DRONES,
+                                           planner="tsp",
+                                           enable_exploration=False)
 
         ######### for _preprocessAction
         self.target_vs = np.zeros((self.NUM_DRONES, 4))
@@ -652,41 +682,37 @@ class FlockingAviary(BaseRLAviary):
                 adjacency_Mat = self._computeAdjacencyMatFOV()
                 # 由 detection step 获得观测
                 relative_position = self._relative_position
-                for nth, mask in enumerate(self.control_by_RL_mask):
-                    if mask:
-                        other_pose_mask = np.ones((self.NUM_DRONES, ))
-                        other_pose_mask[nth] = .0
-                        obs_nth = self.decisions[nth].step(
-                            curr_time=self._getCurrTime,
-                            detection_map=self._computePositionEstimation(
-                                adjacency_Mat, nth),
-                            ego_heading=circle_to_yaw(
-                                self._computeHeading(nth)[:2]),
-                            fov_vector=self._computeFovVector(nth),
-                            relative_pose=relative_position[nth][
-                                other_pose_mask.astype(bool)])
-                        obs.append(obs_nth)
+                for nth in self.control_by_RL_ID:
+                    other_pose_mask = np.ones((self.NUM_DRONES, ))
+                    other_pose_mask[nth] = .0
+                    obs_nth = self.decisions[nth].step(
+                        curr_time=self._getCurrTime,
+                        detection_map=self._computePositionEstimation(
+                            adjacency_Mat, nth),
+                        ego_heading=circle_to_yaw(
+                            self._computeHeading(nth)[:2]),
+                        fov_vector=self._computeFovVector(nth),
+                        relative_pose=relative_position[nth][
+                            other_pose_mask.astype(bool)])
+                    obs.append(obs_nth)
                 # 这样做是由于 obs 在 step_counter == 0 可以初始化
                 self.cache['obs'] = np.array(obs[0]).reshape(1, 1600).astype(
                     np.float32)
 
         if self.USER_DEBUG:
-            self.plot_online_stuff: dict[str, tuple[matplotlib.figure.Figure,
-                                                    matplotlib.axes.Axes]]
-            for index, mask in enumerate(self.control_by_RL_mask):
-                if mask:
-                    self.plot_online_stuff[f"gp_std_{index}"][1].imshow(
-                        X=self.decisions[index].cache["all_std"].reshape(
-                            (40, 40)),
-                        cmap='viridis',
-                        aspect='equal')
-                    self.plot_online_stuff[f"gp_pred_{index}"][1].imshow(
-                        X=self.decisions[index].cache["all_pred"].reshape(
-                            (-40, 40)),
-                        cmap='viridis',
-                        aspect='equal')
-            plt.pause(1e-9)
+            for index in self.control_by_RL_ID:
+                std_array = self.decisions[index].cache["all_std"].reshape(
+                    (40, 40))
+                pred_array = self.decisions[index].cache["all_pred"].reshape(
+                    (40, 40))
 
+                print(self.plot_online_stuff[f"gp_pred_{index}"])
+                self.plot_online_stuff[f"gp_std_{index}"][2].set_array(
+                    std_array)
+                self.plot_online_stuff[f"gp_pred_{index}"][2].set_array(
+                    pred_array)
+
+            plt.pause(1e-9)
         return np.asarray(self.cache['obs'])
 
     def _computeReward(self):
@@ -707,9 +733,9 @@ class FlockingAviary(BaseRLAviary):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()
                 high_info_idx = self.decisions[
                     nth].GP_ground_truth.get_high_info_indx(ground_truth)
+                # unc of all target
                 _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
                     self._getCurrTime, high_info_idx, return_all=True)
-
                 unc_update = np.array(
                     self.cache['unc'][nth]) - np.array(unc_list)
                 reward = np.sum(unc_update[unc_update > .0])
@@ -717,9 +743,8 @@ class FlockingAviary(BaseRLAviary):
                 return reward
 
             reward = np.zeros((self.NUM_DRONES, ))
-            for nth, mask in enumerate(self.control_by_RL_mask):
-                if mask:
-                    reward[nth] = compute_reward(nth)
+            for nth in self.control_by_RL_ID:
+                reward[nth] = compute_reward(nth)
 
             # 惩罚较大 action
             return np.sum(reward).astype(float)
@@ -772,8 +797,8 @@ class FlockingAviary(BaseRLAviary):
             # truncate when to large ang_v 13,14,15
             return False
 
-        for idx, mask in enumerate(self.control_by_RL_mask):
-            if mask and truncated(idx):
+        for idx in self.control_by_RL_ID:
+            if truncated(idx):
                 return True
 
         return False
