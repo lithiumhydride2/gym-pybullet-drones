@@ -4,6 +4,7 @@ import matplotlib
 import matplotlib.axes
 import matplotlib.collections
 import matplotlib.figure
+import matplotlib.lines
 import matplotlib.pyplot
 import numpy as np
 from gymnasium import spaces
@@ -135,8 +136,11 @@ class FlockingAviary(BaseRLAviary):
                          obs=obs,
                          act=act)
         #### Set a limit on the maximum target speed ###############
-        if self.ACT_TYPE == ActionType.YAW:
-            self.SPEED_LIMIT = 0.6  # m/s
+        self.SPEED_LIMIT = 0.6  # m/s
+        if self.ACT_TYPE == ActionType.YAW_DIFF:
+            self.MAX_YAW_DIFF = np.deg2rad(15)
+        if self.ACT_TYPE == ActionType.YAW_RATE:
+            self.MAX_RATE_DIFF = np.deg2rad(20)  # 最大 20 deg/s
 
         #### reynolds #############
         self.FLOCKING_FREQ_HZ = flocking_freq_hz
@@ -149,7 +153,7 @@ class FlockingAviary(BaseRLAviary):
         if self.use_reynolds:
             self.reynolds = Reynolds(random_point=self.RANDOM_POINT)
         self.fov_range = fov_config.value
-
+        self.FOV = None
         ### decision
         self.decisions = {}
         for nth in self.control_by_RL_ID:
@@ -188,10 +192,10 @@ class FlockingAviary(BaseRLAviary):
     def _gp_debug_init(self, user_debug_gui):
 
         self.plot_online_stuff = {}
-        self.plot_online_stuff: dict[str,
-                                     tuple[matplotlib.figure.Figure,
-                                           matplotlib.axes.Axes,
-                                           matplotlib.collections.QuadMesh]]
+        self.plot_online_stuff: dict[
+            str, tuple[matplotlib.figure.Figure, matplotlib.axes.Axes,
+                       matplotlib.collections.QuadMesh,
+                       list[list[matplotlib.lines.Line2D]]]]
 
         # 获取 gird_xx 和 grid_yy 进行 plot
         grid_size = self.decisions[
@@ -215,8 +219,8 @@ class FlockingAviary(BaseRLAviary):
                                      shading='auto',
                                      vmin=0,
                                      vmax=1)
-
-            return figure, ax, quadmesh
+            fov = [ax.plot([], [], 'b-'), ax.plot([], [], 'b-')]
+            return figure, ax, quadmesh, fov
 
         if user_debug_gui:
             for index in self.control_by_RL_ID:
@@ -244,6 +248,13 @@ class FlockingAviary(BaseRLAviary):
             ])
             act_upper_bound = np.array(
                 [np.ones((2, )) for mask in self.control_by_RL_mask if mask])
+        elif self.ACT_TYPE == ActionType.YAW_DIFF or self.ACT_TYPE == ActionType.YAW_RATE:
+            act_lower_bound = np.array([
+                -1.0 * np.ones((1, )) for mask in self.control_by_RL_mask
+                if mask
+            ])
+            act_upper_bound = np.array(
+                [np.ones((1, )) for mask in self.control_by_RL_mask if mask])
         else:
             print("[ERROR] in FlockingAviary._actionspace()")
         return spaces.Box(low=act_lower_bound,
@@ -370,10 +381,8 @@ class FlockingAviary(BaseRLAviary):
             Detection_map : key(nth_drone):value(pos estimation in 2D)
         '''
         drone_poses = self.drone_states[:, 0:3]
-        ego_pose = self.drone_states[nth_drone, 0:3]
-        # 这里需要计算相对位置
-        poses_in_fov = drone_poses[AdjacencyMat[nth_drone].astype(
-            bool)] - ego_pose  # 筛选能够观测到的无人机绝对位置
+        poses_in_fov = self.world2ego_noquad(
+            nth_drone, drone_poses[AdjacencyMat[nth_drone].astype(bool)])
         pose_index_in_fov = np.array(list(range(
             self.NUM_DRONES)))[AdjacencyMat[nth_drone].astype(bool)]
 
@@ -408,7 +417,10 @@ class FlockingAviary(BaseRLAviary):
     ################################################################################
 
     def _computeFovVector(self, nth_drone):
-
+        '''
+        return:
+            fov_vector in world coordinate
+        '''
         ego_heading = self._computeHeading(nth_drone)
         fov_vector = np.array([
             np.dot(
@@ -470,7 +482,8 @@ class FlockingAviary(BaseRLAviary):
         for other in set(range(0, self.NUM_DRONES)) - set([nth_drone]):
             mask[other] = int(
                 in_fov(
-                    self.world2ego(nth_drone, self.drone_states[other, 0:3]),
+                    self.world2ego_noquad(nth_drone, self.drone_states[other,
+                                                                       0:3]),
                     fov_vector))
 
         return mask
@@ -575,7 +588,7 @@ class FlockingAviary(BaseRLAviary):
             # repeat, flocking update in _preprocessAction
             super().step(action, need_return=False)
         # last times
-        return super().step(action)
+        return super().step(action, need_return=True)
 
     ################################################################################
     @property
@@ -625,12 +638,22 @@ class FlockingAviary(BaseRLAviary):
                         axis=0)))  # 将最大速度限制在 speed_limit
 
         action_all = np.zeros((self.NUM_DRONES, 2), dtype=np.float32)
-        # 将对于 control_by_RL_mask 决策的 action 嵌入 action_all
-        action_all[self.control_by_RL_mask] = action
+        if self.ACT_TYPE == ActionType.YAW:
+            # 将对于 control_by_RL_mask 决策的 action 嵌入 action_all
+            action_all[self.control_by_RL_mask] = action
+        elif self.ACT_TYPE == ActionType.YAW_DIFF:
+            # 这里应该 receding horizon control
+            for index in self.control_by_RL_ID:
+                self.target_yaw[index] += action.squeeze() * self.MAX_YAW_DIFF
+            action_all = yaw_to_circle(self.target_yaw)
+
         target_yaws = circle_to_yaw(action_all)
         return self._computeRpmFromCommand(self.target_vs, target_yaws)
 
-    def _computeRpmFromCommand(self, target_vs, target_yaws):
+    def _computeRpmFromCommand(self,
+                               target_vs,
+                               target_yaws,
+                               target_yaws_rate=None):
         '''
         Args:
             target_vs: in shape (num_drones,4)
@@ -660,7 +683,7 @@ class FlockingAviary(BaseRLAviary):
                 target_pos=target_pos,  # same as the current position
                 target_rpy=np.array([0, 0, target_yaw]),  # 接收 target_yaw控制指令
                 target_vel=self.SPEED_LIMIT * np.abs(target_v[3]) *
-                v_unit_vector  # target the desired velocity vector
+                v_unit_vector,  # target the desired velocity vector
             )
             rpm[k, :] = temp
         return rpm
@@ -710,6 +733,16 @@ class FlockingAviary(BaseRLAviary):
                     std_array)
                 self.plot_online_stuff[f"gp_pred_{index}"][2].set_array(
                     pred_array)
+
+                # 绘制 fov
+                fov_vector = self._computeFovVector(index)
+                # fov 1
+                self.plot_online_stuff[f"gp_pred_{index}"][3][0][0].set_data(
+                    [0, fov_vector[0][0]], [0, fov_vector[0][1]])
+                # fov 2
+                self.plot_online_stuff[f"gp_pred_{index}"][3][1][0].set_data(
+                    [0, fov_vector[1][0]], [0, fov_vector[1][1]])
+                self.fov_range
 
             plt.pause(1e-9)
         return np.asarray(self.cache['obs'])

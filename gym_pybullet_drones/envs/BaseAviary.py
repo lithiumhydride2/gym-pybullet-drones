@@ -662,6 +662,13 @@ class BaseAviary(gym.Env):
         ego_point = np.dot(rot_matrix.T, ego_point)
         return ego_point
 
+    def world2ego_noquad(self, nth_drone, point: np.ndarray):
+        '''
+        将 world 坐标系下 point transform 到 nth_drone 非旋转坐标系下
+        '''
+        pos = self.pos[nth_drone, :]
+        return point - pos
+
     @property
     def _getCurrTime(self):
         '''

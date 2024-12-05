@@ -45,6 +45,8 @@ class ActionType(Enum):
     PID = "pid"  # PID control
     VEL = "vel"  # Velocity input (using PID control)
     YAW = "yaw"  # yaw angle in world coordinate, 连续性的
+    YAW_DIFF = "yaw_diff"  # diff 形式的 yaw_angle
+    YAW_RATE = "yaw_rate"  # 角速度的形式
     ONE_D_RPM = "one_d_rpm"  # 1D (identical input to all motors) with RPMs
     ONE_D_PID = "one_d_pid"  # 1D (identical input to all motors) with PID control
 

@@ -41,7 +41,10 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
   - 并不是 eval 时没有获得迁移指令，而是 determinstic 模式下无法运动
   - eval时，没有将 fov 
 - [] reward 完全无法得到收敛，动作空间的设计方式是否有问题！
-- [] 考虑应当模仿图的离散化，重新设计action_space更小
+- [] 考虑应当模仿图的离散化，重新设计action_space更小，
+  - [x] 考虑将 action_space 设计为基于 diff 的形式 ,  这一解法之前有误，现已解决。 目前控制赶不上规划
+
+- [ ] 将 num_uav 和 control_by_RL_mask 设置为随机
 
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：

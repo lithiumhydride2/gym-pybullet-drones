@@ -5,7 +5,7 @@ from flocking import *
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-11.28.2024_22.16.01"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.04.2024_22.10.26"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
@@ -44,7 +44,8 @@ def main():
     # 这里使用四边形场地进行验证？
     TEST_DURATION = 40
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
-        action, _states = model.predict(obs, deterministic=False)
+        # action, _states = model.predict(obs, deterministic=False)
+        action = np.array([1]).reshape(1, 1)
         obs, reward, terminated, truncated, info = test_env.step(action)
 
         for j in range(test_env.NUM_DRONES):
@@ -62,8 +63,8 @@ def main():
 
     test_env.close()
     #### plot
-    # logger.plot()
-    # logger.plot_traj()
+    logger.plot()
+    logger.plot_traj()
 
 
 if __name__ == "__main__":

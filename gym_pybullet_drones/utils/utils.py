@@ -96,7 +96,7 @@ def yaw_to_circle(yaw):
     '''
     yaw = np.array(yaw)
     circle = np.array([np.sin(yaw), np.cos(yaw)])
-    return circle
+    return circle.reshape(-1, 2)
 
 
 def circle_to_yaw(circile):

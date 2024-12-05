@@ -48,7 +48,8 @@ DEFAULT_COLAB = False
 DEFAULT_NUM_DRONE = 4
 
 DEFAULT_OBS_TYPE = ObservationType.GAUSSIAN
-DEFAULT_ACT_TYPE = ActionType.YAW
+# DEFAULT_ACT_TYPE = ActionType.YAW
+DEFAULT_ACT_TYPE = ActionType.YAW_DIFF
 DEFAULT_FOV_CONFIG = FOVType.SINGLE
 
 DEFAULT_FLOCKING_FREQ = 10
@@ -316,7 +317,7 @@ if __name__ == "__main__":
         help='Whether example is being run by a notebook (default: "False")',
         metavar='')
     # 这里需要添加 args = [] 才能使用 vscode 进行 debug
-    ARGS = parser.parse_args(args=[])
+    ARGS = parser.parse_args()
     # run(**vars(ARGS))
 
     learn(**vars(ARGS))
