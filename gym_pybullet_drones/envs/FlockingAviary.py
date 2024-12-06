@@ -138,9 +138,10 @@ class FlockingAviary(BaseRLAviary):
         #### Set a limit on the maximum target speed ###############
         self.SPEED_LIMIT = 0.6  # m/s
         if self.ACT_TYPE == ActionType.YAW_DIFF:
-            self.MAX_YAW_DIFF = np.deg2rad(15)
+            MAX_YAW_RATE = np.deg2rad(10)  # max deg/s
+            self.MAX_YAW_DIFF = MAX_YAW_RATE / decision_freq_hz
         if self.ACT_TYPE == ActionType.YAW_RATE:
-            self.MAX_RATE_DIFF = np.deg2rad(20)  # 最大 20 deg/s
+            self.MAX_YAW_RATE = np.deg2rad(30)  #
 
         #### reynolds #############
         self.FLOCKING_FREQ_HZ = flocking_freq_hz
@@ -637,34 +638,49 @@ class FlockingAviary(BaseRLAviary):
                      command_norm.shape), command_norm / self.SPEED_LIMIT),
                         axis=0)))  # 将最大速度限制在 speed_limit
 
-        action_all = np.zeros((self.NUM_DRONES, 2), dtype=np.float32)
         if self.ACT_TYPE == ActionType.YAW:
             # 将对于 control_by_RL_mask 决策的 action 嵌入 action_all
-            action_all[self.control_by_RL_mask] = action
+            target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
+                                          dtype=np.float32)
+            target_yaws_circle[self.control_by_RL_mask] = action
         elif self.ACT_TYPE == ActionType.YAW_DIFF:
             # 这里应该 receding horizon control
             for index in self.control_by_RL_ID:
                 self.target_yaw[index] += action.squeeze() * self.MAX_YAW_DIFF
-            action_all = yaw_to_circle(self.target_yaw)
+            target_yaws_circle = yaw_to_circle(self.target_yaw)
 
-        target_yaws = circle_to_yaw(action_all)
-        return self._computeRpmFromCommand(self.target_vs, target_yaws)
+        elif self.ACT_TYPE == ActionType.YAW_RATE:
+            target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
+                                          dtype=np.float32)
+            target_yaw_rates = np.zeros((self.NUM_DRONES, ), dtype=np.float32)
+            for index in self.control_by_RL_ID:
+                target_yaw_rates[index] = action.squeeze() * self.MAX_YAW_RATE
+            # return in target rate mode
+            return self._computeRpmFromCommand(
+                self.target_vs, target_yaw_rates=target_yaw_rates)
+
+        target_yaws = circle_to_yaw(target_yaws_circle)
+        return self._computeRpmFromCommand(self.target_vs,
+                                           target_yaws=target_yaws)
 
     def _computeRpmFromCommand(self,
                                target_vs,
-                               target_yaws,
-                               target_yaws_rate=None):
+                               target_yaws=None,
+                               target_yaw_rates=None):
         '''
         Args:
             target_vs: in shape (num_drones,4)
             target_yaws: in shape (num_drones,1)
         '''
+        if target_yaw_rates is None:
+            target_yaw_rates = np.zeros((self.NUM_DRONES, ))
         rpm = np.zeros((self.NUM_DRONES, 4))
         for k in range(self.NUM_DRONES):
             #### Get the current state of the drone  ###################
             state = self._getDroneStateVector(k)
             target_v = target_vs[k]
-            target_yaw = target_yaws[k]
+            # in yaw_rate mode , target_yaw 应当为当前的 yaw
+            target_yaw = target_yaws[k] if target_yaws is not None else state[9]
             #### Normalize the first 3 components of the target velocity
             if np.linalg.norm(target_v[0:3]) != 0:
                 v_unit_vector = target_v[0:3] / np.linalg.norm(target_v[0:3])
@@ -681,10 +697,10 @@ class FlockingAviary(BaseRLAviary):
                 cur_vel=state[10:13],
                 cur_ang_vel=state[13:16],
                 target_pos=target_pos,  # same as the current position
-                target_rpy=np.array([0, 0, target_yaw]),  # 接收 target_yaw控制指令
+                target_rpy=np.array([0, 0, target_yaw]),
                 target_vel=self.SPEED_LIMIT * np.abs(target_v[3]) *
                 v_unit_vector,  # target the desired velocity vector
-            )
+                target_rpy_rates=np.array([0, 0, target_yaw_rates[k]]))
             rpm[k, :] = temp
         return rpm
 
@@ -825,6 +841,9 @@ class FlockingAviary(BaseRLAviary):
             # truncate when a drone is too tilted
             if abs(drone_states[nth][7]) > .4 or abs(
                     drone_states[nth][8]) > .4:
+                return True
+            # truncted when fly too low
+            if drone_states[nth][2] < 1.5:
                 return True
             # truncate when to large ang_v 13,14,15
             return False

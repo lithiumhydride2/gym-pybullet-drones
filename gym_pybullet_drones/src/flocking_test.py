@@ -42,7 +42,7 @@ def main():
     start = time.time()
 
     # 这里使用四边形场地进行验证？
-    TEST_DURATION = 40
+    TEST_DURATION = 20
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
         # action, _states = model.predict(obs, deterministic=False)
         action = np.array([1]).reshape(1, 1)

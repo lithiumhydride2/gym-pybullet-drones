@@ -43,6 +43,7 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [] reward 完全无法得到收敛，动作空间的设计方式是否有问题！
 - [] 考虑应当模仿图的离散化，重新设计action_space更小，
   - [x] 考虑将 action_space 设计为基于 diff 的形式 ,  这一解法之前有误，现已解决。 目前控制赶不上规划
+  - [ ] 使用 speed 模式时，无法产生真实 yaw action
 
 - [ ] 将 num_uav 和 control_by_RL_mask 设置为随机
 
