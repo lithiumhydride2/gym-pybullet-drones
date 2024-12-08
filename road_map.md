@@ -44,8 +44,9 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [] 考虑应当模仿图的离散化，重新设计action_space更小，
   - [x] 考虑将 action_space 设计为基于 diff 的形式 ,  这一解法之前有误，现已解决。 目前控制赶不上规划
   - [ ] 使用 speed 模式时，无法产生真实 yaw action
-
-- [ ] 将 num_uav 和 control_by_RL_mask 设置为随机
+  - [ ] 考虑重新设计 reward, 我这个持续监控的模式，可能不适合reward
+- [x] 将 num_uav 和 control_by_RL_mask 设置为随机
+- [ ] 减少 action space, 提前 truncted RL
 
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：

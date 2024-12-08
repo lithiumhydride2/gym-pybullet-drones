@@ -45,7 +45,7 @@ DEFAULT_DURATION_SEC = 30
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
-DEFAULT_NUM_DRONE = 4
+DEFAULT_NUM_DRONE = 5
 
 DEFAULT_OBS_TYPE = ObservationType.GAUSSIAN
 # DEFAULT_ACT_TYPE = ActionType.YAW
@@ -85,12 +85,10 @@ def learn(drone=DEFAULT_DRONE,
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(num_drones)])  # 横一字排列
     INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
-    control_by_RL_mask = np.zeros((num_drones, ))
-    control_by_RL_mask[0] = 1
 
     env_kwargs = dict(drone_model=drone,
                       num_drones=num_drones,
-                      control_by_RL_mask=control_by_RL_mask.astype(bool),
+                      control_by_RL_mask="random",
                       initial_xyzs=INIT_XYZS,
                       initial_rpys=INIT_RPYS,
                       pyb_freq=simulation_freq_hz,

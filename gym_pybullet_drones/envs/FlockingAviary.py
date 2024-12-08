@@ -35,7 +35,7 @@ class FlockingAviary(BaseRLAviary):
     def __init__(self,
                  drone_model: DroneModel = DroneModel.CF2X,
                  num_drones: int = 1,
-                 control_by_RL_mask=np.zeros((1, )).astype(bool),
+                 control_by_RL_mask=None,
                  neighbourhood_radius: float = np.inf,
                  initial_xyzs=None,
                  initial_rpys=None,
@@ -66,6 +66,7 @@ class FlockingAviary(BaseRLAviary):
             The desired number of drones in the aviary.
         control_by_RL_mask: ndistance_curr - position_mean
             in shape(num_drones,).astype(bool), 表示哪些无人机受到 decision 控制, 不受到 decision 控制的无人机具有超能力！
+            if control_by_RL_mask is "random", 随机采样无人机 control by RL mask
         neighbourhood_radius : float, optional
             Radius used to compute the drones' adjacency matrix, in meters.
         initial_xyzs: ndarray | None, optional
@@ -112,10 +113,17 @@ class FlockingAviary(BaseRLAviary):
                               )  # 此处 vswarm_quad 是套壳的 cf2x ，因此使用 cf2x 的控制方法
                 for _ in range(num_drones)
             ]
-        self.control_by_RL_mask = control_by_RL_mask
+        # init control_by_RL_mask
+        mask = np.zeros((num_drones, ))
+        if isinstance(control_by_RL_mask,
+                      str) and control_by_RL_mask == "random":
+            self.RANDOM_RL_MASK = True
+            mask[np.random.randint(0, num_drones)] = 1
+        else:
+            mask[0] = 1
+        self.control_by_RL_mask = mask.astype(bool)
         self.control_by_RL_ID = np.array(
-            list(range(0,
-                       num_drones)), dtype=np.int32)[self.control_by_RL_mask]
+            list(range(0, num_drones)), dtype=np.int8)[self.control_by_RL_mask]
         ### position estimation error level #####
         self.position_noise_std = [0.11, 0.16, 0.22, 0.31, 0.42, 0.50, 0.60]
 
@@ -187,11 +195,13 @@ class FlockingAviary(BaseRLAviary):
         ### hyper param
         self.VISABLE_DEGREE_THERSHOLD = 5  # in degree
         self.VISABLE_FAIL_DETECT = 0.05  # 5% 的概率无法检出目标
-        self._gp_debug_init(user_debug_gui)
+
+        if self.USER_DEBUG:
+            self._gp_debug_init(self.USER_DEBUG)
 
     ################################################################################
     def _gp_debug_init(self, user_debug_gui):
-
+        plt.close("all")
         self.plot_online_stuff = {}
         self.plot_online_stuff: dict[
             str, tuple[matplotlib.figure.Figure, matplotlib.axes.Axes,
@@ -525,7 +535,7 @@ class FlockingAviary(BaseRLAviary):
 
     ################################################################################
     def reset(self, seed=None, options=None):
-        # 重新初始化控制器
+        #### 重新初始化控制器 对于所有无人机
         if self.DRONE_MODEL in [
                 DroneModel.CF2X, DroneModel.CF2P, DroneModel.VSWARM_QUAD
         ]:
@@ -533,6 +543,17 @@ class FlockingAviary(BaseRLAviary):
                 DSLPIDControl(drone_model=DroneModel.CF2X)
                 for _ in range(self.NUM_DRONES)
             ]
+
+        #### 重新初始化 control_by_RL_MASK
+        if hasattr(self, "RANDOM_RL_MASK") and self.RANDOM_RL_MASK:
+            mask = np.zeros((self.NUM_DRONES, ))
+            mask[np.random.randint(0, self.NUM_DRONES)] = 1
+            self.control_by_RL_mask = mask.astype(bool)
+
+            self.control_by_RL_ID = np.array(
+                list(range(0, self.NUM_DRONES)),
+                dtype=np.int8)[self.control_by_RL_mask]
+
         # house_kepping of flocking aviary
         self.decisions = {}
         for nth in self.control_by_RL_ID:
@@ -552,6 +573,10 @@ class FlockingAviary(BaseRLAviary):
         self.cache = {}
         self.cache['obs'] = None
         self.cache['unc'] = [1.0] * self.NUM_DRONES
+        ### 初始化 debug gui
+        if self.USER_DEBUG:
+            self._gp_debug_init(self.USER_DEBUG)
+
         return super().reset(seed, options)
 
     def step(self, action):
@@ -781,7 +806,7 @@ class FlockingAviary(BaseRLAviary):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()
                 high_info_idx = self.decisions[
                     nth].GP_ground_truth.get_high_info_indx(ground_truth)
-                # unc of all target
+                # UNc update reward
                 _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
                     self._getCurrTime, high_info_idx, return_all=True)
                 unc_update = np.array(

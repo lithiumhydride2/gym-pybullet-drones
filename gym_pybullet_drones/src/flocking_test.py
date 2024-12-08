@@ -3,9 +3,13 @@ import torch
 from stable_baselines3.ppo import PPO
 from flocking import *
 
+# override
+DEFAULT_GUI = True
+DEFAULT_USER_DEBUG_GUI = True
+
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.04.2024_22.10.26"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.06.2024_17.54.31"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
@@ -44,8 +48,8 @@ def main():
     # 这里使用四边形场地进行验证？
     TEST_DURATION = 20
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
-        # action, _states = model.predict(obs, deterministic=False)
-        action = np.array([1]).reshape(1, 1)
+        action, _states = model.predict(obs, deterministic=False)
+        print("Action is : {}".format(action))
         obs, reward, terminated, truncated, info = test_env.step(action)
 
         for j in range(test_env.NUM_DRONES):
