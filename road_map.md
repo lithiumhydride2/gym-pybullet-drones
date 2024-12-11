@@ -37,17 +37,21 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [x] 为 gptorch 添加数据的归一化与反归一化，现在 gpytorch 的行为与 sklearn 差异过大 已解决
 
 ### 几点初步设计思路
-- [] 当前 control by RL 的无人机无法获取迁移指令？ 这合理吗，容易在初期丢失目标造成 terminated (这是在 eval 时观察的情况)
+- [X] 当前 control by RL 的无人机无法获取迁移指令？ 这合理吗，容易在初期丢失目标造成 terminated (这是在 eval 时观察的情况)
   - 并不是 eval 时没有获得迁移指令，而是 determinstic 模式下无法运动
   - eval时，没有将 fov 
-- [] reward 完全无法得到收敛，动作空间的设计方式是否有问题！
+- [X] reward 完全无法得到收敛，动作空间的设计方式是否有问题！
 - [] 考虑应当模仿图的离散化，重新设计action_space更小，
   - [x] 考虑将 action_space 设计为基于 diff 的形式 ,  这一解法之前有误，现已解决。 目前控制赶不上规划
-  - [ ] 使用 speed 模式时，无法产生真实 yaw action
+  - [x] 使用 speed 模式时，无法产生真实 yaw action
   - [ ] 考虑重新设计 reward, 我这个持续监控的模式，可能不适合reward
 - [x] 将 num_uav 和 control_by_RL_mask 设置为随机
 - [ ] 减少 action space, 提前 truncted RL
 
+### STAMP 的新思路
+- 探讨了各种建模对于环境的影响，但无论如何，我们需要对 action space 进行图的离散化。
+- 使用 IPP 思路进行建模， action type 应当为 yaw 直接控制的形式
+- 
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash

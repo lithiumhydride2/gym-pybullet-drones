@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from stable_baselines3.ppo import PPO
+from stable_baselines3.common.env_checker import check_env
 from flocking import *
 
 # override
@@ -9,7 +10,7 @@ DEFAULT_USER_DEBUG_GUI = True
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.06.2024_17.54.31"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.08.2024_22.35.07"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
@@ -36,7 +37,7 @@ def main():
                       obs=DEFAULT_OBS_TYPE,
                       act=DEFAULT_ACT_TYPE,
                       random_point=False)
-    test_env = FlockingAviary(**env_kwargs)
+    test_env = FlockingAviaryIPP(**env_kwargs)
 
     logger = Logger(logging_freq_hz=DEFAULT_DECISION_FREQ,
                     num_drones=DEFAULT_NUM_DRONE,
@@ -46,9 +47,10 @@ def main():
     start = time.time()
 
     # 这里使用四边形场地进行验证？
-    TEST_DURATION = 20
+    TEST_DURATION = 40
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
-        action, _states = model.predict(obs, deterministic=False)
+
+        action, _states = model.predict(obs, deterministic=True)
         print("Action is : {}".format(action))
         obs, reward, terminated, truncated, info = test_env.step(action)
 

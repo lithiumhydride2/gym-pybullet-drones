@@ -108,5 +108,16 @@ def circle_to_yaw(circile):
     return yaw
 
 
+def circle_angle_diff(p1: np.ndarray, p2: np.ndarray):
+    '''
+    计算以单位圆方式 表示航向角下 两个角度的偏差 的绝对值
+    '''
+    p1 = p1.reshape(-1, 2)
+    p2 = p2.reshape(-1, 2)
+    delta_cos = p1[:, 0] * p2[:, 0] + p1[:, 1] * p2[:, 1]
+    delta_sin = p1[:, 1] * p2[:, 0] - p1[:, 0] * p2[:, 1]
+    return np.abs(np.arctan2(abs(delta_sin), delta_cos))
+
+
 def add_t(X, t: float):
     return np.concatenate((X, np.zeros((X.shape[0], 1)) + t), axis=1)

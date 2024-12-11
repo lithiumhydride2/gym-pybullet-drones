@@ -25,6 +25,7 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 from gym_pybullet_drones.envs.FlockingAviary import FlockingAviary
+from gym_pybullet_drones.envs.FlockingAviaryIPP import FlockingAviaryIPP
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
@@ -50,7 +51,7 @@ DEFAULT_NUM_DRONE = 5
 DEFAULT_OBS_TYPE = ObservationType.GAUSSIAN
 # DEFAULT_ACT_TYPE = ActionType.YAW
 # DEFAULT_ACT_TYPE = ActionType.YAW_DIFF
-DEFAULT_ACT_TYPE = ActionType.YAW_RATE
+DEFAULT_ACT_TYPE = ActionType.YAW_RATE_DISCRETE
 DEFAULT_FOV_CONFIG = FOVType.SINGLE
 
 DEFAULT_FLOCKING_FREQ = 10
@@ -102,7 +103,7 @@ def learn(drone=DEFAULT_DRONE,
                       obs=obs,
                       act=act)  # 定义 action space and observation space
 
-    train_env = make_vec_env(FlockingAviary,
+    train_env = make_vec_env(FlockingAviaryIPP,
                              env_kwargs=env_kwargs,
                              n_envs=1,
                              seed=0)
@@ -110,7 +111,7 @@ def learn(drone=DEFAULT_DRONE,
     # 这里 train_env 和 eval_env 的 pyplot 可能会发生冲突
     env_kwargs['user_debug_gui'] = False
     env_kwargs['gui'] = False
-    eval_env = Monitor(FlockingAviary(**env_kwargs))
+    eval_env = Monitor(FlockingAviaryIPP(**env_kwargs))
     #### check the environment's spaces
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)

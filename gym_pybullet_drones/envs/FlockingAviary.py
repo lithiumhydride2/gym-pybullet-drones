@@ -128,6 +128,8 @@ class FlockingAviary(BaseRLAviary):
         self.position_noise_std = [0.11, 0.16, 0.22, 0.31, 0.42, 0.50, 0.60]
 
         ######### finally, super.__init__()
+        if act == ActionType.YAW_RATE_DISCRETE:
+            self.NUM_DISCRETE_ACTION = 9  # 最好是一个奇数，action 以 int(NUM_DISCRETE_ACTION/2) 为中点
         super().__init__(drone_model=drone_model,
                          num_drones=num_drones,
                          neighbourhood_radius=neighbourhood_radius,
@@ -148,8 +150,8 @@ class FlockingAviary(BaseRLAviary):
         if self.ACT_TYPE == ActionType.YAW_DIFF:
             MAX_YAW_RATE = np.deg2rad(10)  # max deg/s
             self.MAX_YAW_DIFF = MAX_YAW_RATE / decision_freq_hz
-        if self.ACT_TYPE == ActionType.YAW_RATE:
-            self.MAX_YAW_RATE = np.deg2rad(30)  #
+        if self.ACT_TYPE == ActionType.YAW_RATE or self.ACT_TYPE == ActionType.YAW_RATE_DISCRETE:
+            self.MAX_YAW_RATE = np.deg2rad(35)  #
 
         #### reynolds #############
         self.FLOCKING_FREQ_HZ = flocking_freq_hz
@@ -266,6 +268,10 @@ class FlockingAviary(BaseRLAviary):
             ])
             act_upper_bound = np.array(
                 [np.ones((1, )) for mask in self.control_by_RL_mask if mask])
+        elif self.ACT_TYPE == ActionType.YAW_RATE_DISCRETE:
+            return spaces.Discrete(n=self.NUM_DISCRETE_ACTION,
+                                   seed=42,
+                                   start=0)
         else:
             print("[ERROR] in FlockingAviary._actionspace()")
         return spaces.Box(low=act_lower_bound,
@@ -668,18 +674,18 @@ class FlockingAviary(BaseRLAviary):
             target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
                                           dtype=np.float32)
             target_yaws_circle[self.control_by_RL_mask] = action
-        elif self.ACT_TYPE == ActionType.YAW_DIFF:
-            # 这里应该 receding horizon control
-            for index in self.control_by_RL_ID:
-                self.target_yaw[index] += action.squeeze() * self.MAX_YAW_DIFF
-            target_yaws_circle = yaw_to_circle(self.target_yaw)
-
-        elif self.ACT_TYPE == ActionType.YAW_RATE:
+        elif self.ACT_TYPE == ActionType.YAW_RATE or self.ACT_TYPE == ActionType.YAW_RATE_DISCRETE:
             target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
                                           dtype=np.float32)
             target_yaw_rates = np.zeros((self.NUM_DRONES, ), dtype=np.float32)
             for index in self.control_by_RL_ID:
-                target_yaw_rates[index] = action.squeeze() * self.MAX_YAW_RATE
+                # 从 [0,10] 映射到 [-5,5]
+                coeff = float(action.squeeze(
+                ) - int(self.NUM_DISCRETE_ACTION / 2)) / int(
+                    self.NUM_DISCRETE_ACTION / 2
+                ) if self.ACT_TYPE == ActionType.YAW_RATE_DISCRETE else action.squeeze(
+                )
+                target_yaw_rates[index] = coeff * self.MAX_YAW_RATE
             # return in target rate mode
             return self._computeRpmFromCommand(
                 self.target_vs, target_yaw_rates=target_yaw_rates)
@@ -762,7 +768,13 @@ class FlockingAviary(BaseRLAviary):
                 # 这样做是由于 obs 在 step_counter == 0 可以初始化
                 self.cache['obs'] = np.array(obs[0]).reshape(1, 1600).astype(
                     np.float32)
+        self.plot_online()
+        return np.asarray(self.cache['obs'])
 
+    def plot_online(self):
+        """
+        更新 plot_online_stuff 的内容
+        """
         if self.USER_DEBUG:
             for index in self.control_by_RL_ID:
                 std_array = self.decisions[index].cache["all_std"].reshape(
@@ -783,10 +795,8 @@ class FlockingAviary(BaseRLAviary):
                 # fov 2
                 self.plot_online_stuff[f"gp_pred_{index}"][3][1][0].set_data(
                     [0, fov_vector[1][0]], [0, fov_vector[1][1]])
-                self.fov_range
 
             plt.pause(1e-9)
-        return np.asarray(self.cache['obs'])
 
     def _computeReward(self):
         """Computes the current reward value(s).
@@ -806,13 +816,18 @@ class FlockingAviary(BaseRLAviary):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()
                 high_info_idx = self.decisions[
                     nth].GP_ground_truth.get_high_info_indx(ground_truth)
-                # UNc update reward
+                ## Unc update reward
                 _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
                     self._getCurrTime, high_info_idx, return_all=True)
-                unc_update = np.array(
-                    self.cache['unc'][nth]) - np.array(unc_list)
+                unc_list = np.asarray(unc_list)
+                unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
+                unc_update = self.cache['unc'][nth] - unc_list
                 reward = np.sum(unc_update[unc_update > .0])
                 self.cache['unc'][nth] = unc_list
+
+                ## Unc reward, 鼓励减少不确定性
+                unc_reward = 1 - unc_list
+                reward += np.sum(unc_reward[unc_reward > .0])
                 return reward
 
             reward = np.zeros((self.NUM_DRONES, ))
@@ -827,7 +842,7 @@ class FlockingAviary(BaseRLAviary):
     def _computeTerminated(self):
         """Computes the current terminated value(s).
 
-        ru
+        这些条件都是导致
 
         Returns
         -------
@@ -838,6 +853,29 @@ class FlockingAviary(BaseRLAviary):
         # 这里 target_vs 的最后一项为 norm
         if np.all(np.abs(self.target_vs[:, -1]) < 1e-3):
             return True  # 不名原因速度消失
+
+        drone_states = self.drone_states
+        relative_position = self._relative_position
+
+        def terminated(nth):
+            other_mask = np.ones((self.NUM_DRONES)).astype(bool)
+            other_mask[nth] = False
+            relative_distance = np.linalg.norm(relative_position[nth],
+                                               axis=1)[other_mask]
+            # 无人机间最小距离小于 1.0 m
+            if np.min(relative_distance) < 1.0:
+                return True
+            # truncted when fly too low
+            if drone_states[nth][2] < 1.5:
+                return True
+            # nth 无人机与其余无人机最小距离大于 x
+            if np.min(relative_distance) > 3.4:
+                return True
+            return False
+
+        for idx in self.control_by_RL_ID:
+            if terminated(idx):
+                return True
         return False
 
     ################################################################################
@@ -851,26 +889,13 @@ class FlockingAviary(BaseRLAviary):
             Dummy value.
         
         """
-        # update in _preprocessAction
         drone_states = self.drone_states
-        relative_position = self._relative_position
 
         def truncated(nth):
-            other_mask = np.ones((self.NUM_DRONES))
-            other_mask[nth] = 0.
-            # 无人机间最小距离小于 1.0 m
-            if np.min(
-                    np.linalg.norm(relative_position[nth],
-                                   axis=1)[other_mask.astype(bool)]) < 1.0:
-                return True
             # truncate when a drone is too tilted
             if abs(drone_states[nth][7]) > .4 or abs(
                     drone_states[nth][8]) > .4:
                 return True
-            # truncted when fly too low
-            if drone_states[nth][2] < 1.5:
-                return True
-            # truncate when to large ang_v 13,14,15
             return False
 
         for idx in self.control_by_RL_ID:
