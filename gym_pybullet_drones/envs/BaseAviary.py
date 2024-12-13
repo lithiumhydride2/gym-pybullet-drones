@@ -670,7 +670,7 @@ class BaseAviary(gym.Env):
         return point - pos
 
     @property
-    def _getCurrTime(self):
+    def CurrTime(self):
         '''
         step counter is counter for pyb
         '''

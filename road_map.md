@@ -49,8 +49,9 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [ ] 减少 action space, 提前 truncted RL
 
 ### STAMP 的新思路
-- 探讨了各种建模对于环境的影响，但无论如何，我们需要对 action space 进行图的离散化。
-- 使用 IPP 思路进行建模， action type 应当为 yaw 直接控制的形式
+- [] 探讨了各种建模对于环境的影响，但无论如何，我们需要对 action space 进行图的离散化。
+  - [] 这里需要考虑的是如何评估 Node_feature
+- [x]使用 IPP 思路进行建模， action type 应当为 yaw 直接控制的形式
 - 
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：

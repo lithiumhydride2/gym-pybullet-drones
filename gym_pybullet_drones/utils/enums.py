@@ -60,6 +60,7 @@ class ObservationType(Enum):
     KIN = "kin"  # Kinematic information (pose, linear and angular velocities)
     RGB = "rgb"  # RGB camera capture in each drone's POV
     GAUSSIAN = "gaussian"  # gaussian process of each drone in world and non rotation corrdinate
+    IPP = "ipp"  # 以 IPP 形式获得观测
     POSE = "pose"  # 直接相对位置估计结果
 
 

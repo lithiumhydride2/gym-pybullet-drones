@@ -1,6 +1,7 @@
 from .FlockingAviary import *
 from .IPPArguments import IPPArg
 from ..utils.graph_controller import GraphController
+from ..utils.utils import circle_angle_diff
 
 
 class FlockingAviaryIPP(FlockingAviary):
@@ -53,6 +54,58 @@ class FlockingAviaryIPP(FlockingAviary):
                     node_coords[:, 0], node_coords[:, 1], c='orchid')
                 plt.pause(1e-10)
 
+    def step(self):
+        return super().step()
+
+    def reset(self, seed=None, options=None):
+        '''
+        reset 的最终作用为获取 initial_obs, initial_info
+        '''
+        for nth in self.control_by_RL_ID:
+            self.IPPEnvs[nth].reset()
+        return super().reset(seed, options)
+
+    def _computeObs(self):
+        '''
+        Return the current observation of the environment.
+        '''
+        # 获得增广图形式的观测
+        if self.OBS_TYPE == ObservationType.IPP and self.step_counter % self.DECISION_PER_PYB == 0:
+            obs = {}
+            adjacency_Mat = self._computeAdjacencyMatFOV()
+            relative_position = self._relative_position
+            for nth in self.control_by_RL_ID:
+                # 获得观测时，重新进行采样
+                self.IPPEnvs[nth].resample()
+                other_pose_mask = np.ones((self.NUM_DRONES, )).astype(bool)
+                other_pose_mask[nth] = False
+                gaussian_obs = self.decisions[nth].step(
+                    curr_time=self.CurrTime,
+                    detection_map=self._computePositionEstimation(
+                        adjacency_Mat, nth),
+                    ego_heading=circle_to_yaw(self._computeHeading(nth)[:2]),
+                    fov_vector=self._computeFovVector(nth),
+                    relative_pose=relative_position[nth][other_pose_mask],
+                    node_coords=self.IPPEnvs[nth].node_coords)
+                obs[nth] = self.IPPEnvs[nth].Obs, gaussian_obs
+
+        self.plot_online()
+        return obs
+
+    def _computeReward(self):
+        pass
+
+    def _computeTerminated(self):
+
+        def outbudget():
+            ## 判断是否将 budget 消耗完
+            for nth in self.control_by_RL_ID:
+                if self.IPPEnvs[nth].budget < 0:
+                    return True
+            return False
+
+        return outbudget or super()._computeTerminated()
+
 
 class IPPenv:
 
@@ -65,6 +118,40 @@ class IPPenv:
             curr_coord=yaw_start,
             samp_num=IPPArg.sample_num,
             gen_range=IPPArg.gen_range)
+        self.curr_node_index = 0  # 当前 node index
+        self.route = [self.curr_node_index]  # 记录经过的路径
+        self.budget_range = IPPArg.budget_range
+        self.budget = np.random.uniform(low=self.budget_range[0],
+                                        high=self.budget_range[1])
+
+    @property
+    def Obs(self):
+        '''
+        返回 IPPenv 获得的 obs
+        '''
+        self.node_coords, self.graph, self.budget
+
+    def resample(self, curr_yaw):
+        '''
+        Args:
+            curr_yaw: 当前yaw 角度
+        '''
+        self.node_coords, self.graph = self.graph_control.gen_graph(
+            curr_coord=curr_yaw,
+            samp_num=IPPArg.sample_num,
+            gen_range=IPPArg.gen_range)
+
+    def reset(self):
+        '''
+        重新进行采样
+        
+        如何处理运行到一半的 action 呢？
+        '''
+        # 重新采样 budget
+        self.curr_node_index = 0
+        self.route = [self.curr_node_index]
+        self.budget = np.random.uniform(low=self.budget_range[0],
+                                        high=self.budget_range[1])
 
 
 if __name__ == "__main__":

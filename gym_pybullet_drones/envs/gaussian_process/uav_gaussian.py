@@ -81,12 +81,14 @@ class UAVGaussian():
                  other_pose=None,
                  ego_heading=None,
                  fov_vector=None,
-                 time=None):
+                 time=None,
+                 node_coords=None):
         """
         ### description : 进行 gp_ground_truth 和 gp_detection 的step
          ---------------
         ### param :
          - detection_map: { 0:pos_target_0, 1:pos_target_1 ... },if no detection, the value is none
+         - node_coords: yaw角形式是
          ---------------
         ### returns :
         - all_std: 叠加了(如果打开了 kFovEffectGP 开关) negitive sample 之后的 std
@@ -107,29 +109,13 @@ class UAVGaussian():
 
         # 更新 GP 参数
         self.GP_detection.update_GPs()
+        # update grid
         all_pred, all_std, _ = self.GP_detection.update_grids(time)
-
-        ##### 触发 fov 影响的采集
-        # if self.kFovEffectGP and self.negitive_gather:
-        #     neg_std = self.GP_detection.update_negititve_gps(
-        #         X=np.zeros((1, 2)),
-        #         Y=0,
-        #         time=time,
-        #         mask=self.__get_fov_mask(fov_vector))
-        #     all_std = np.min(np.array([neg_std, all_std]), axis=0)
-        # ##### 否则叠加最新的 fov effect
-        # elif self.kFovEffectGP and len(self.all_stds_list):
-        #     all_std = self.all_stds_list[-1]
+        # update node feature
+        node_feature = self.GP_detection.update_node_feature(time, node_coords)
         self.cache["all_std"] = all_std
         self.cache["all_pred"] = all_pred
-        return all_std
-
-    @property
-    def negitive_gather(self):
-        if self.curr_time - self.last_negitive_sample_time >= 0.5:
-            self.last_negitive_sample_time = self.curr_time
-            return True
-        return False
+        return all_std, node_feature
 
     def __get_fov_mask(self, fov_vector):
         '''
@@ -180,30 +166,36 @@ class UAVGaussian():
 
         return flocking_graph, ground_truth_pose, estimation_err
 
-    def step(self, curr_time, detection_map, ego_heading, fov_vector,
-             relative_pose):
+    def step(self,
+             curr_time,
+             detection_map,
+             ego_heading,
+             fov_vector,
+             relative_pose,
+             node_coords=None):
         """
-        -----
         Args:
             curr_time: ros传入的当前时刻
             detection_map: key: nth_drone value: position estimation, 需要坐标系下直接计算的 相对位置
             ego_heading: 无人机当前 yaw 角， 世界坐标系下
             fov_vector: 无人机当前 fov, 由两向量组成，世界坐标系下
             relative_pose: 其他无人机的真实位置,需不包含与自身的相对位置
-        ----
-        ## return:
-        all_std: [1600,]
+            node_coords: 节点坐标，用于评估节点特征
+        
+        Return:
+            node_feature
         """
         self.curr_time = curr_time
         self.ego_heading = ego_heading
 
         # GP_step
-        all_std = self._gp_step(detection_map=detection_map,
-                                other_pose=relative_pose,
-                                ego_heading=ego_heading,
-                                fov_vector=fov_vector,
-                                time=curr_time)
-        return all_std
+        all_std, node_feature = self._gp_step(detection_map=detection_map,
+                                              other_pose=relative_pose,
+                                              ego_heading=ego_heading,
+                                              fov_vector=fov_vector,
+                                              time=curr_time,
+                                              node_coords=node_coords)
+        return all_std, node_feature
 
     def DecisionStep(self, obs):
         '''

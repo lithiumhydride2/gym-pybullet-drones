@@ -212,47 +212,6 @@ class GaussianProcess:
                 print("mask_idx is : ", mask_idx)
                 print("ovserved_points is :", self.observed_points)
 
-    def update_negitive_gp_data(self, X=None, Y=None, mask=None):
-        # 存储数据点
-        self.neg_observed_points.append(X)
-        self.neg_observed_value.append(Y)
-        self.fov_mask_queue.append(mask)
-        # 删除旧数据
-        scale_t = self.negitive_kernel_length_scale[-1]
-        # Matern1.5: 2.817: 0.1%; 1.993: 1%; 1.376: 5%; 1.093: 10%
-        dt = 1.993 * scale_t
-        curr_t = X.squeeze()[-1]  # 时间为最后一项
-        while curr_t - self.neg_observed_points[0].squeeze()[-1] >= dt:
-            self.neg_observed_points.popleft()
-            self.neg_observed_value.popleft()
-            self.fov_mask_queue.popleft()
-
-    def fit_negitive_gp_at_time(self, curr_t=None):
-        std_neg_list = []
-        for index in range(len(self.neg_observed_points)):
-            self.negitive_gp.fit(
-                self.neg_observed_points[index].reshape(-1, 3),
-                np.array(self.neg_observed_value[index]).reshape(-1, 1))
-            fov_mask = self.fov_mask_queue[index]
-            std_neg_at_index = self.update_negitive_grid(curr_t, fov_mask)
-            std_neg_list.append(std_neg_at_index +
-                                np.ones_like(std_neg_at_index) *
-                                (~fov_mask.astype(bool)).astype(int))
-        self.neg_std_at_grid = np.min(np.asarray(std_neg_list), axis=0)
-        return self.neg_std_at_grid
-
-    def update_negitive_gp(self, X=None, Y=None, mask=None):
-        self.update_negitive_gp_data(X=X, Y=Y, mask=mask)
-        return self.fit_negitive_gp_at_time(curr_t=X.squeeze()[-1])
-
-    def update_negitive_grid(self, t, fov_mask=None):
-        '''
-        '''
-        _, std_neg_at_grid = self.negitive_gp.predict(add_t(self.grid, t),
-                                                      return_std=True)
-        std_neg_at_grid = std_neg_at_grid * fov_mask
-        return std_neg_at_grid
-
     def update_node(self, t):
         '''
         predict using GaussianProcess with node_coords
@@ -373,18 +332,22 @@ class GaussianProcessWrapper:
         for _, GP in enumerate(self.GPs):
             GP.update_gp()
 
-    def update_negititve_gps(self, X=None, Y=None, time=None, mask=None):
+    def update_node_feature(self, time, node_coords):
         '''
-        ### param:
-            mask: fake_fov mask
-        ### return:
-            返回 neg_std
-        当前仅将 negitive_gp 附加在 self.GPs[0] 之上
+        update node feature at time t
         '''
-        if time is not None:
-            self.curr_t = time
-
-        return self.GPs[0].update_negitive_gp(add_t(X, self.curr_t), Y, mask)
+        node_info = []
+        for gp in self.GPs:
+            node_pred, node_std = gp.update_node(time, node_coords)
+            node_pred: np.ndarray
+            node_std: np.ndarray
+            node_info += [
+                np.hstack((node_pred.reshape(-1, 1), node_std.reshape(-1, 1)))
+            ]
+        node_feature = np.asarray(node_info)  #(target,node,2 (features) )
+        node_feature = node_feature.transpose(1, 0, 2).reshape(
+            self.node_coords.shape[0], -1)  #(node, target * feature)
+        return node_feature
 
     def update_grids(self, time: float = None):
         '''

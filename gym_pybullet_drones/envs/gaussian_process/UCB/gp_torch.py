@@ -20,7 +20,7 @@ class GaussianProcessTorch():
         self.observed_value: deque[np.ndarray] = deque()
 
         self.curr_t = -1.0
-        self.cache = {}
+        self.cache: dict[str, np.ndarray] = {}
         # config
         self.scale_t = 3.0  # 指定 kernel lenghtscale of time.
         self.grid_size = 40
@@ -79,6 +79,25 @@ class GaussianProcessTorch():
         self.cache["y_pred_at_grid"] = mean
         self.cache["std_at_grid"] = std
         return self.cache["y_pred_at_grid"], self.cache["std_at_grid"]
+
+    def update_node(self, t, node_coords):
+        '''
+        Args:
+            node_coords: 节点未知
+        '''
+        if self.curr_t == t:
+            pass
+        # 更新 curr_t 作为时间戳
+        self.curr_t = t
+        node_coords_with_t = torch.from_numpy(add_t(node_coords,
+                                                    t)).to(self.device)
+        predict_node = self.gp_torch.predict(node_coords_with_t)
+        mean = predict_node.mean.cpu().detach().numpy()
+        std = predict_node.mean.cpu().detach().numpy()
+
+        self.cache["y_pred_at_node"] = mean
+        self.cache["std_at_node"] = std
+        return self.cache["y_pred_at_node"], self.cache["std_at_node"]
 
     def evaluate_unc(self, idx=None, t=None):
         '''

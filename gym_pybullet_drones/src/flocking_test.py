@@ -7,6 +7,7 @@ from flocking import *
 # override
 DEFAULT_GUI = True
 DEFAULT_USER_DEBUG_GUI = True
+DEFAULT_ACT_TYPE = ActionType.YAW
 
 
 def main():
@@ -47,10 +48,19 @@ def main():
     start = time.time()
 
     # 这里使用四边形场地进行验证？
+    def yaw_test(time):
+        if time < 5:
+            return np.array([1, 0])
+        elif time < 10:
+            return np.array([0, 1])
+        elif time < 15:
+            return np.array([-1, 0])
+
     TEST_DURATION = 40
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
 
-        action, _states = model.predict(obs, deterministic=True)
+        # action, _states = model.predict(obs, deterministic=True)
+        action = yaw_test(test_env.CurrTime)
         print("Action is : {}".format(action))
         obs, reward, terminated, truncated, info = test_env.step(action)
 

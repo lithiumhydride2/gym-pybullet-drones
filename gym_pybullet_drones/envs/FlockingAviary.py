@@ -756,7 +756,7 @@ class FlockingAviary(BaseRLAviary):
                     other_pose_mask = np.ones((self.NUM_DRONES, ))
                     other_pose_mask[nth] = .0
                     obs_nth = self.decisions[nth].step(
-                        curr_time=self._getCurrTime,
+                        curr_time=self.CurrTime,
                         detection_map=self._computePositionEstimation(
                             adjacency_Mat, nth),
                         ego_heading=circle_to_yaw(
@@ -818,7 +818,7 @@ class FlockingAviary(BaseRLAviary):
                     nth].GP_ground_truth.get_high_info_indx(ground_truth)
                 ## Unc update reward
                 _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
-                    self._getCurrTime, high_info_idx, return_all=True)
+                    self.CurrTime, high_info_idx, return_all=True)
                 unc_list = np.asarray(unc_list)
                 unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
                 unc_update = self.cache['unc'][nth] - unc_list
