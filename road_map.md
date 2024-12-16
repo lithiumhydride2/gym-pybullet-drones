@@ -50,7 +50,8 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 
 ### STAMP 的新思路
 - [] 探讨了各种建模对于环境的影响，但无论如何，我们需要对 action space 进行图的离散化。
-  - [] 这里需要考虑的是如何评估 Node_feature
+  - [] 这里需要考虑的是如何评估 Node_feature，这里需要将 GP 建模在 action space 之中
+  - [] 先调通在图的离散化中基本的操作
 - [x]使用 IPP 思路进行建模， action type 应当为 yaw 直接控制的形式
 - 
 # Install

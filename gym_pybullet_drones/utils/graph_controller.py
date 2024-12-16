@@ -32,20 +32,20 @@ class GraphController:
         self.dijkstra_dist = []
         self.dijkstra_prev = []
 
-    def gen_graph(self, curr_coord, samp_num, gen_range):
+    def gen_graph(self, curr_coord: np.ndarray, samp_num, gen_range):
         """
         Args:
             curr_coord: 当前在图中的坐标
             samp_num: 采样的数量
             gen_range: range of sample, in shape (DIM, )
         """
-        curr_idx = self.findNodeIndex(curr_coord)
+
         self.dijkstra_dist = []
         self.dijkstra_prev = []
         self.graph = Graph()
-        self.node_coords = None
+        self.node_coords = curr_coord.reshape(1, self.DIM)
+        count = 1
         # 需要在单位圆上进行采样
-        count = 0
         while count < samp_num:
             new_coord = yaw_to_circle(np.random.uniform(.0,
                                                         2 * np.pi)).reshape(
@@ -61,8 +61,6 @@ class GraphController:
                     self.node_coords = np.concatenate(
                         (self.node_coords, new_coord), axis=0)
                 count += 1
-
-        self.node_coords[curr_idx] = curr_coord
 
         self.findNearestNeighbour(k=self.k_size)
         self.calcAllPathCost()

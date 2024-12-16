@@ -26,6 +26,7 @@ from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 from gym_pybullet_drones.envs.FlockingAviary import FlockingAviary
 from gym_pybullet_drones.envs.FlockingAviaryIPP import FlockingAviaryIPP
+from gym_pybullet_drones.models.IPPActorCriticPolicy import IPPActorCriticPolicy
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
@@ -40,6 +41,7 @@ DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
 ## change gui
 DEFAULT_GUI = False
 DEFAULT_USER_DEBUG_GUI = False
+
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
 DEFAULT_OBSTACLES = False
@@ -51,10 +53,8 @@ DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
 DEFAULT_NUM_DRONE = 5
 
-DEFAULT_OBS_TYPE = ObservationType.GAUSSIAN
+DEFAULT_OBS_TYPE = ObservationType.IPP
 DEFAULT_ACT_TYPE = ActionType.YAW
-# DEFAULT_ACT_TYPE = ActionType.YAW_DIFF
-# DEFAULT_ACT_TYPE = ActionType.YAW_RATE_DISCRETE
 DEFAULT_FOV_CONFIG = FOVType.SINGLE
 
 DEFAULT_FLOCKING_FREQ = 10
@@ -120,8 +120,9 @@ def learn(drone=DEFAULT_DRONE,
     print('[INFO] Observation space:', train_env.observation_space)
 
     ### train the model
-    model = PPO('MlpPolicy',
-                train_env,
+    # USE USER POLICY
+    model = PPO(policy=IPPActorCriticPolicy,
+                env=train_env,
                 verbose=1,
                 tensorboard_log=filename + '/tb/')
 
@@ -320,7 +321,7 @@ if __name__ == "__main__":
         help='Whether example is being run by a notebook (default: "False")',
         metavar='')
     # 这里需要添加 args = [] 才能使用 vscode 进行 debug
-    ARGS = parser.parse_args()
+    ARGS = parser.parse_args(args=[])
     # run(**vars(ARGS))
 
     learn(**vars(ARGS))

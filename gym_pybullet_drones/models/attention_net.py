@@ -28,7 +28,7 @@ import math
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 from torch.cuda.amp.autocast_mode import autocast
-from parameters import *
+from gym_pybullet_drones.envs.IPPArguments import IPPArg
 
 
 class SingleHeadAttention(nn.Module):
@@ -101,7 +101,7 @@ class SingleHeadAttention(nn.Module):
 
 class MultiHeadAttention(nn.Module):
 
-    def __init__(self, embedding_dim, n_heads=N_HEADS):
+    def __init__(self, embedding_dim, n_heads=IPPArg.N_HEADS):
         super(MultiHeadAttention, self).__init__()
         self.n_heads = n_heads
         self.input_dim = embedding_dim
@@ -284,11 +284,10 @@ class AttentionNet(nn.Module):
         self.budget_embedding = nn.Linear(embedding_dim + 2, embedding_dim)
         self.value_output = nn.Linear(embedding_dim, 1)
 
-        if K_SIZE >= 8:
+        if IPPArg.k_size >= 8:
             self.pos_embedding = nn.Linear(32, embedding_dim)
         else:
-            self.pos_embedding = nn.Linear(K_SIZE * len(FACING_ACTIONS),
-                                           embedding_dim)
+            self.pos_embedding = nn.Linear(IPPArg.k_size, embedding_dim)
         # self.nodes_update_layers = nn.ModuleList([DecoderLayer(embedding_dim, 8) for i in range(3)])
 
         # self.current_embedding = nn.Linear(embedding_dim*2, embedding_dim)
@@ -339,8 +338,10 @@ class AttentionNet(nn.Module):
         current_edge = current_edge.permute(0, 2, 1)
         embedding_dim = embedding_feature.size()[2]
 
-        th = torch.FloatTensor([ADAPTIVE_TH]).unsqueeze(0).unsqueeze(0).repeat(
-            batch_size, sample_size, 1).to(embedding_feature.device)
+        th = torch.FloatTensor([IPPArg.ADAPTIVE_TH
+                                ]).unsqueeze(0).unsqueeze(0).repeat(
+                                    batch_size, sample_size,
+                                    1).to(embedding_feature.device)
 
         embedding_feature = self.budget_embedding(
             torch.cat((embedding_feature, budget_inputs, th), dim=-1))

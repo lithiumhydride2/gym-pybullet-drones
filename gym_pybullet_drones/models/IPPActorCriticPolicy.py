@@ -1,5 +1,6 @@
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from stable_baselines3.common.policies import ActorCriticPolicy
+from gym_pybullet_drones.envs.IPPArguments import IPPArg
 from .attention_net import AttentionNet
 from torch import nn
 import torch as th
@@ -7,9 +8,10 @@ import torch as th
 
 class IPPFeaturesExtractor(BaseFeaturesExtractor):
 
-    def __init__(self, observation_space, features_dim=0):
+    def __init__(self, observation_space, features_dim=IPPArg.INPUT_DIM):
         super().__init__(observation_space, features_dim)
-        self.attention_net = AttentionNet()  # Args todo
+        self.attention_net = AttentionNet(IPPArg.INPUT_DIM,
+                                          IPPArg.EMBEDDING_DIM)  # Args todo
 
     def forward(self, observation):
         return self.attention_net(observation)
@@ -29,7 +31,7 @@ class IPPActorCriticPolicy(ActorCriticPolicy):
                  full_std=True,
                  use_expln=False,
                  squash_output=False,
-                 features_extractor_class=...,
+                 features_extractor_class=IPPFeaturesExtractor,
                  features_extractor_kwargs=None,
                  share_features_extractor=True,
                  normalize_images=True,

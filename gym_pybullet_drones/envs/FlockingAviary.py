@@ -295,7 +295,7 @@ class FlockingAviary(BaseRLAviary):
 
             pass
 
-        if self.OBS_TYPE == ObservationType.GAUSSIAN:
+        elif self.OBS_TYPE == ObservationType.GAUSSIAN:
             heat_map_sz = 40**2
             obs_lower_bound = np.array([
                 -1.0 * np.ones((heat_map_sz, ))
@@ -308,6 +308,9 @@ class FlockingAviary(BaseRLAviary):
             return spaces.Box(low=obs_lower_bound,
                               high=obs_upper_bound,
                               dtype=np.float32)
+
+        else:
+            raise NotImplementedError
 
     ################################################################################
     @property
@@ -549,16 +552,6 @@ class FlockingAviary(BaseRLAviary):
                 DSLPIDControl(drone_model=DroneModel.CF2X)
                 for _ in range(self.NUM_DRONES)
             ]
-
-        #### 重新初始化 control_by_RL_MASK
-        if hasattr(self, "RANDOM_RL_MASK") and self.RANDOM_RL_MASK:
-            mask = np.zeros((self.NUM_DRONES, ))
-            mask[np.random.randint(0, self.NUM_DRONES)] = 1
-            self.control_by_RL_mask = mask.astype(bool)
-
-            self.control_by_RL_ID = np.array(
-                list(range(0, self.NUM_DRONES)),
-                dtype=np.int8)[self.control_by_RL_mask]
 
         # house_kepping of flocking aviary
         self.decisions = {}

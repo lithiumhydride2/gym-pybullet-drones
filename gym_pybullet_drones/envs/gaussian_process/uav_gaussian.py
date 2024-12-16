@@ -131,41 +131,6 @@ class UAVGaussian():
         conditions = np.apply_along_axis(in_fov_along_axis, 1, grid)
         return conditions.astype(int)
 
-    def step_flocking_metrics(self, detection_absolute_index):
-        detection_data = np.array(self.detection.loc[detection_absolute_index])
-        curr_time = detection_data[0]
-        self.curr_index = self.pose.loc[self.pose["Time"] >= curr_time].head(
-            1).index[0]
-        self.__update_relative_pos()
-        detection_pose = detection_data[1:].reshape(-1, 2)
-
-        flocking_graph = dict()
-        for other in self.other_list:
-            flocking_graph[other] = 0
-        ground_truth_pose = np.array(
-            self.relative_pose.loc[self.curr_index]).reshape(-1, 2)
-        # 补充自身位置的连接
-        # 在自身位置处插入 zero
-        ground_truth_pose = np.insert(ground_truth_pose,
-                                      self.id - 1,
-                                      np.zeros((1, 2)),
-                                      axis=0)
-
-        tree = cKDTree(ground_truth_pose)
-        # indice 为对 detection_pose的查询
-        _, indice = tree.query(detection_pose)
-        estimation_err = [np.array([np.nan, np.nan])] * (self.num_uav)
-        for index, sense in enumerate(indice):
-            if sense >= self.num_uav:
-                continue
-            flocking_graph[sense + 1] = 1
-            estimation_err[
-                sense] = detection_pose[index] - ground_truth_pose[sense]
-            # estimation_err.append(detection_pose[index] -
-            #                       ground_truth_pose[sense])
-
-        return flocking_graph, ground_truth_pose, estimation_err
-
     def step(self,
              curr_time,
              detection_map,
@@ -195,7 +160,7 @@ class UAVGaussian():
                                               fov_vector=fov_vector,
                                               time=curr_time,
                                               node_coords=node_coords)
-        return all_std, node_feature
+        return {"node_features": node_feature}
 
     def DecisionStep(self, obs):
         '''
