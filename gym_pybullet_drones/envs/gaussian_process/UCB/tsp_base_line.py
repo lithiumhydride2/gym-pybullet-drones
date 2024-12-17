@@ -24,7 +24,7 @@ class TSPBaseLine:
     def __init__(self,
                  num_latent_target=1,
                  fake_fov_range=[0, 0],
-                 **kwargs) -> None:
+                 enable_exploration=False) -> None:
         '''
         kwargs:
             fake_fov_range: fov的边界，以vector形式展现
@@ -45,7 +45,7 @@ class TSPBaseLine:
         ### 常量
         self.kTargetBeliefThreshold = 0.5  # 若对某目标置信度低于该阈值，加入待访问节点
         self.kTargetExistBeliefThreshold = 0.1  # 若置信度低于此值，则认为环境中目标不存在
-        self.kEnableExploartion = kwargs.get("enable_exploration", False)
+        self.kEnableExploartion = enable_exploration
 
         self.selected_motion_primitive = None
         self.last_motion_primitive = None

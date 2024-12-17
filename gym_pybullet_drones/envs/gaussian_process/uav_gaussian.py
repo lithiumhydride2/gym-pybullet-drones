@@ -4,8 +4,7 @@ from gym_pybullet_drones.envs.gaussian_process.gaussian_process import GaussianP
 from gym_pybullet_drones.envs.gaussian_process.gaussian_process import GaussianProcessWrapper
 from gym_pybullet_drones.envs.gaussian_process.UCB.tsp_base_line import TSPBaseLine
 from gym_pybullet_drones.utils.utils import *
-# from .metrics import Metrics
-# from .util.utils import *
+from scipy.spatial.transform import Rotation as R
 
 
 def add_t(X, t: float):
@@ -22,17 +21,18 @@ class UAVGaussian():
         fov_range,
         nth_drone=0,
         num_drone=3,
-        planner="tsp",
-        **kwargs,
+        planner=None,
+        node_coords=None,
     ) -> None:
         """
         ## description :
          ---------------
-        ## param :
-         - id: 无人机编号, 为 1 ~ num_uav
-         - planner: tsp|rl
-        ## kwargs:
-         - enable_exploration: 是否使能探索功能
+        Args:
+            fov_range: 以两个角度表示的 fov_range
+            nth_drone: uav id
+            num_drone: 集群中无人机的数量
+            planner: 规划器种类，可选 tsp, 若无需基于规则规划期，置为 None
+            node_coords: 采样得到的节点坐标
         """
 
         self.id = nth_drone
@@ -50,31 +50,36 @@ class UAVGaussian():
 
         self.GP_detection = GaussianProcessWrapper(num_uav=self.num_drone,
                                                    other_list=self.other_list,
-                                                   node_coords=np.zeros(
-                                                       (1, 2)),
                                                    id=self.id)
-
+        self.node_coords = node_coords
+        self.fov_range = fov_range
+        self.fov_masks = self._get_FOV_masks_of_node()
         self.cache: dict[str, np.ndarray] = {}  # cache
-        ######### metrics
-        self.last_all_std = None
-        # self.metrics_obj = Metrics(**kwargs)
         ################### planner select ##############
 
         if planner == "tsp":
             self.planner = TSPBaseLine(
                 num_latent_target=self.num_latent_target,
-                fake_fov_range=fov_range,
-                **kwargs)
-        else:
-            raise NameError
-        # fov 需要设置为参数
+                fake_fov_range=fov_range)
+
         self.ego_heading = 0.0  # 自身朝向状态量
         self.last_ego_heading = 0.0  # 上一个朝向状态量
         self.last_yaw_action = 0.0  # 上一个朝向输出
 
-        # 首先关闭 FOV 对高斯过程的影响
-        self.kFovEffectGP = False  # FOV信息是否影响高斯过程
-        self.last_negitive_sample_time = 0.0
+    def _get_FOV_masks_of_node(self):
+        # node_coords 在世界坐标系下,对于每个 node 生成一个 FOV_mask
+        FOV_masks = []
+        for node in self.node_coords:
+            node = np.hstack((node, [0]))
+            FOV_vector = np.asarray([
+                np.dot(
+                    R.from_euler('z', angle,
+                                 degrees=False).as_matrix().reshape(3, 3),
+                    node) for angle in self.fov_range
+            ])
+            FOV_masks.append(self.__get_fov_mask(FOV_vector))
+
+        return np.asarray(FOV_masks)
 
     def _gp_step(self,
                  detection_map: dict[int, np.ndarray] = None,
@@ -91,7 +96,7 @@ class UAVGaussian():
          - node_coords: yaw角形式是
          ---------------
         ### returns :
-        - all_std: 叠加了(如果打开了 kFovEffectGP 开关) negitive sample 之后的 std
+        - all_std
          ---------------
         """
         # TODO(lih): gaussian process part
@@ -110,12 +115,39 @@ class UAVGaussian():
         # 更新 GP 参数
         self.GP_detection.update_GPs()
         # update grid
-        all_pred, all_std, _ = self.GP_detection.update_grids(time)
+        all_pred, all_std, self.cache["preds"], self.cache[
+            "stds"] = self.GP_detection.update_grids(time)
         # update node feature
-        node_feature = self.GP_detection.update_node_feature(time, node_coords)
+        node_feature = self.update_node_feature()
+        # node_feature = self.GP_detection.update_node_feature(time, node_coords)
         self.cache["all_std"] = all_std
         self.cache["all_pred"] = all_pred
         return all_std, node_feature
+
+    def update_node_feature(self):
+        '''
+        通过 FOV mask 的形式提取 node_feature
+
+        依赖 self.cache["preds"], self.cache["stds"]
+        '''
+        node_feature = []
+        pred: np.ndarray
+
+        def get_feature(grid, compare=np.min):
+            feature = []
+            for mask in self.fov_masks:
+                feature.append(compare(grid[mask.astype(bool)]))
+            return np.asarray(feature)
+
+        for pred, std in zip(self.cache["preds"], self.cache["stds"]):
+            node_feature += [
+                np.hstack((get_feature(pred, np.max).reshape(-1, 1),
+                           get_feature(std, np.min).reshape(-1, 1)))
+            ]
+        node_feature = np.asarray(node_feature)  #(target,node,feature(2))
+        node_feature = node_feature.transpose(1, 0, 2).reshape(
+            self.node_coords.shape[0], -1)  #(node,target * feature)
+        return node_feature
 
     def __get_fov_mask(self, fov_vector):
         '''
@@ -177,50 +209,7 @@ class UAVGaussian():
         self.last_ego_heading = self.ego_heading
         self.last_yaw_action = action[-1]
 
-        # metrices
-        # if self.fake_ros:
-        #     all_pred, _, _ = self.GP_detection.update_grids(self.curr_time)
-        #     JS = self.GP_detection.eval_all_js(
-        #         np.max(self.GP_ground_truth.y_true_lists[-1], axis=-1),
-        #         all_pred)
-        #     _, UNC = self.GP_detection.eval_unc_with_grid(std_at_grid=all_std)
-        #     _, FOV_UNC = self.GP_detection.eval_unc_with_grid(
-        #         high_info_idx=np.array([[]] * self.num_latent_target),
-        #         std_at_grid=all_std)
-        #     self.metrics_obj.step(jsd=JS, unc=UNC, fovunc=FOV_UNC)
         return self.last_yaw_action
-
-    def save_animation(self, **kwargs):
-        """
-        保存动画的方法。
-            :param dpi: 分辨率, 默认为100。
-            :param file_format: 文件格式, 默认为'mp4'。
-            :param save_traj: 是否保存轨迹, 默认为False。
-            :param save_relative: 是否保存相对位置, 默认为False。
-            :param save_gaussian: 是否保存高斯效果, 默认为False。
-            :param save_step=10 step为10,则每100ms为一帧数
-        """
-        self.__setPlot()
-        self.uav_animation.__dict__.update(self.__dict__)
-
-        if not (self.id == 1):
-            kwargs.setdefault("save_traj", False)
-            kwargs["save_traj"] = False
-        self.uav_animation.save_animation(**kwargs)
-
-    def save_metrics(self, **kwargs):
-        """
-        保存 metrics 的方法
-            :param dpi: 分辨率, 默认为100。
-            :param file_format: 文件格式, 默认为'mp4'。
-            :param save_traj: 是否保存轨迹, 默认为False。
-            :param save_relative: 是否保存相对位置, 默认为False。
-            :param save_gaussian: 是否保存高斯效果, 默认为False。
-            :param save_step=10 step为10,则每100ms为一帧数
-        """
-        self.__setPlot()
-        self.metrics_obj.__dict__.update(self.__dict__)
-        self.metrics_obj.save_figure(**kwargs)
 
 
 if __name__ == "__main__":

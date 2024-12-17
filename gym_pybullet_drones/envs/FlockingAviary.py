@@ -167,13 +167,6 @@ class FlockingAviary(BaseRLAviary):
         self.FOV = None
         ### decision
         self.decisions = {}
-        for nth in self.control_by_RL_ID:
-            self.decisions[nth] = decision(fov_range=self.fov_range,
-                                           nth_drone=nth,
-                                           num_drone=num_drones,
-                                           planner="tsp",
-                                           enable_exploration=False)
-
         self.DECISION_FREQ_HZ = decision_freq_hz
         if self.PYB_FREQ % self.DECISION_FREQ_HZ != 0:
             raise ValueError
@@ -552,15 +545,6 @@ class FlockingAviary(BaseRLAviary):
                 DSLPIDControl(drone_model=DroneModel.CF2X)
                 for _ in range(self.NUM_DRONES)
             ]
-
-        # house_kepping of flocking aviary
-        self.decisions = {}
-        for nth in self.control_by_RL_ID:
-            self.decisions[nth] = decision(fov_range=self.fov_range,
-                                           nth_drone=nth,
-                                           num_drone=self.NUM_DRONES,
-                                           planner="tsp",
-                                           enable_exploration=False)
 
         ######### for _preprocessAction
         self.target_vs = np.zeros((self.NUM_DRONES, 4))

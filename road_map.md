@@ -33,7 +33,7 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
     - 使用了 GPyTorch, 将运行速度提升了 5 倍
 - [x] 考虑使用 方位测量 和 距离测量进行替代, 这样的 reward 似乎难以设计
 - [x] 使 control_by_RL_mask 的无人机无法接受迁移控制指令
-- [] 考虑如何设计 reward function， 是否把对 angular speed 的幅度限制加入 _computeTerminated()
+- [x] 考虑如何设计 reward function， 是否把对 angular speed 的幅度限制加入 `_computeTerminated()`，已加入
 - [x] 为 gptorch 添加数据的归一化与反归一化，现在 gpytorch 的行为与 sklearn 差异过大 已解决
 
 ### 几点初步设计思路
@@ -46,14 +46,18 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
   - [x] 使用 speed 模式时，无法产生真实 yaw action
   - [ ] 考虑重新设计 reward, 我这个持续监控的模式，可能不适合reward
 - [x] 将 num_uav 和 control_by_RL_mask 设置为随机
-- [ ] 减少 action space, 提前 truncted RL
+- [x] 减少 action space, 提前 truncted RL
 
-### STAMP 的新思路
+## STAMP 的新思路
 - [] 探讨了各种建模对于环境的影响，但无论如何，我们需要对 action space 进行图的离散化。
   - [] 这里需要考虑的是如何评估 Node_feature，这里需要将 GP 建模在 action space 之中
   - [] 先调通在图的离散化中基本的操作
 - [x]使用 IPP 思路进行建模， action type 应当为 yaw 直接控制的形式
-- 
+
+### 先考虑简化OBS与网络的设计，
+- [] budget 在 IPP 中用于判断下一个节点是否可达，我似乎并不需要这样一个 budget
+  - [x] 这个 budget 可以用于现在在 knn 中的连接，因为我们需要限制过大的 yaw action
+- [] 那么现在输入为增广图， 已执行过的路径，这是一个简化
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash

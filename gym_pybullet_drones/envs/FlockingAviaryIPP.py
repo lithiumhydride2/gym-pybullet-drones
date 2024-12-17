@@ -75,10 +75,17 @@ class FlockingAviaryIPP(FlockingAviary):
                 dtype=np.int8)[self.control_by_RL_mask]
 
         # 重新初始化 control_by_RL_ID
+        self.decisions = {}
+        self.IPPEnvs = {}
         for nth in self.control_by_RL_ID:
             self.IPPEnvs[nth] = IPPenv(yaw_start=self._computeHeading(nth)[:2],
                                        act_type=self.ACT_TYPE)
-
+            # 使用 IPPEnvs 的采样初始化 self.decision
+            self.decisions[nth] = decision(
+                fov_range=self.fov_range,
+                nth_drone=nth,
+                num_drone=self.NUM_DRONES,
+                node_coords=self.IPPEnvs[nth].node_coords)
         return super().reset(seed, options)
 
     def _observationSpace(self):
@@ -91,8 +98,21 @@ class FlockingAviaryIPP(FlockingAviary):
                     shape=(IPPArg.sample_num,
                            (self.NUM_DRONES - 1) * 2),  # mean and std
                     dtype=np.float32),
-                # "edge_feature":
-                # Box(low=0., high=1., shape=(TODO), dtype=np.float32)
+                "edge_inputs":
+                Box(low=0,
+                    high=IPPArg.sample_num - 1,
+                    shape=(IPPArg.sample_num, IPPArg.k_size),
+                    dtype=np.int32),
+                "curr_index":
+                Box(low=0,
+                    high=IPPArg.sample_num - 1,
+                    shape=(1, 1),
+                    dtype=np.int32),
+                "graph_pos_encoding":
+                Box(low=0.,
+                    high=1.,
+                    shape=(IPPArg.sample_num, IPPArg.num_eigen_value),
+                    dtype=np.float32)
             })
 
     def _computeObs(self):
@@ -107,11 +127,9 @@ class FlockingAviaryIPP(FlockingAviary):
             adjacency_Mat = self._computeAdjacencyMatFOV()
             relative_position = self._relative_position
             for nth in self.control_by_RL_ID:
-                # 获得观测时，重新进行采样
-                self.IPPEnvs[nth].resample(
-                    curr_yaw=self._computeHeading(nth)[:2])
+                #TODO 获得观测时，需要更新 IPP_env
 
-                # 用作
+                # mask 用于获取真实相对位置
                 other_pose_mask = np.ones((self.NUM_DRONES, )).astype(bool)
                 other_pose_mask[nth] = False
 
@@ -123,7 +141,8 @@ class FlockingAviaryIPP(FlockingAviary):
                     fov_vector=self._computeFovVector(nth),
                     relative_pose=relative_position[nth][other_pose_mask],
                     node_coords=self.IPPEnvs[nth].node_coords)
-                obs[nth] = gaussian_obs
+                # 合并两个 obs
+                obs[nth] = gaussian_obs | self.IPPEnvs[nth].Obs
 
         self.plot_online()
         return obs[self.control_by_RL_ID[0]]
@@ -151,10 +170,12 @@ class IPPenv:
         self.graph_control = GraphController(start=yaw_start,
                                              k_size=IPPArg.k_size,
                                              act_type=act_type)
+        #生成图
         self.node_coords, self.graph = self.graph_control.gen_graph(
             curr_coord=yaw_start,
             samp_num=IPPArg.sample_num,
             gen_range=IPPArg.gen_range)
+
         self.curr_node_index = 0  # 当前 node index
         self.yaw_start = yaw_start
         self.route_coord = [self.yaw_start]
@@ -168,7 +189,45 @@ class IPPenv:
         '''
         返回 IPPenv 获得的 obs
         '''
-        self.node_coords, self.graph, self.budget
+        # 以 dict 形式获取观测
+
+        ### edge_inputs, 表示采样 node_coords 中节点的 knn 连接关系
+        edge_inputs = []
+        # 遍历 values， 不遍历 keys
+        for node in self.graph.values():
+            node_edges = list(map(int, node))
+            edge_inputs.append(node_edges)
+        edge_inputs = np.asarray(edge_inputs)
+        # 计算 graph_pos_encoding
+        graph_pos_encoding = self.graph_pos_encoding(edge_inputs)
+        ### curr_index
+        curr_index = np.asarray(self.curr_node_index).reshape(-1, 1)
+        return {
+            "edge_inputs": edge_inputs,
+            "curr_index": curr_index,
+            "graph_pos_encoding": graph_pos_encoding
+        }
+
+    def graph_pos_encoding(self, edge_inputs):
+        '''
+        通过图的 laplace矩阵 的 特征向量 对节点进行编码，得到每个节点的低维位置表示。
+        '''
+        graph_size = IPPArg.sample_num
+        A_matrix = np.zeros((graph_size, graph_size))
+        D_matrix = np.zeros((graph_size, graph_size))
+        for i in range(graph_size):
+            for j in range(graph_size):
+                if j in edge_inputs[i] and i != j:
+                    A_matrix[i][j] = 1.0
+        for i in range(graph_size):
+            D_matrix[i][i] = 1 / np.sqrt(len(edge_inputs[i]) - 1)
+        L = np.eye(graph_size) - np.matmul(D_matrix, A_matrix, D_matrix)
+        eigen_values, eigen_vector = np.linalg.eig(L)
+        idx = eigen_values.argsort()
+        eigen_values, eigen_vector = eigen_values[idx], np.real(
+            eigen_vector[:, idx])
+        eigen_vector = eigen_vector[:, 1:IPPArg.num_eigen_value + 1]
+        return np.asarray(eigen_vector)  #(graph_size, num_eigen_value)
 
     def resample(self, curr_yaw):
         '''
@@ -180,6 +239,7 @@ class IPPenv:
 
         # 必须到达当前 action 才能进行离散图的 resample? 吗
         #TODO 如果在当前位置没有到达上次采样的位置，是否直接进行 resample
+        #TODO 这里考虑在航向角的语义下，使用固定的 action_space 即可？
         self.node_coords, self.graph = self.graph_control.gen_graph(
             curr_coord=curr_yaw,
             samp_num=IPPArg.sample_num,

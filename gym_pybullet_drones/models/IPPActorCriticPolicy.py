@@ -10,6 +10,7 @@ class IPPFeaturesExtractor(BaseFeaturesExtractor):
 
     def __init__(self, observation_space, features_dim=IPPArg.INPUT_DIM):
         super().__init__(observation_space, features_dim)
+        #TODO: 需要看看 attnetion_net 中实现了哪些内容， 对于我减少观测数量与类型的 obs 应当设计怎样的 attention_net
         self.attention_net = AttentionNet(IPPArg.INPUT_DIM,
                                           IPPArg.EMBEDDING_DIM)  # Args todo
 

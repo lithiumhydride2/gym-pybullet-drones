@@ -155,7 +155,6 @@ class GaussianProcess:
         ############# stack for information
         self.observed_points = []
         self.observed_value = []
-        self.node_coords = node_coords
         self.y_pred_at_node, self.std_at_node = None, None
         self.y_pred_at_grid, self.std_at_grid = None, None
         self.y_pred_at_grid_lists = []
@@ -274,14 +273,12 @@ class GaussianProcessWrapper:
     def __init__(self,
                  num_uav: int,
                  other_list: list[int],
-                 node_coords: np.ndarray,
                  id=0,
                  use_gpytorch=True) -> None:
         """
         ### param :
          - num_uav: 无人机总数量
          - other_list: list of other index
-         - node_coords: 随机初始化的一组点(初始观测),in shape(-1,2)
          - id: 无人机自身编号 0 ~ num_uav - 1
          ---------------
         ### returns :
@@ -291,7 +288,6 @@ class GaussianProcessWrapper:
         self.num_uav = num_uav
         self.id = id
         self.other_list = other_list
-        self.node_coords = node_coords
         if use_gpytorch:
             self.GPs: list[GaussianProcessTorch] = [
                 GaussianProcessTorch(id=self.id, other_id=other)
@@ -300,7 +296,6 @@ class GaussianProcessWrapper:
         else:
             self.GPs = [
                 GaussianProcess(
-                    node_coords=node_coords,
                     adaptive_kernel=False,
                     id=self.id,
                     other_id=other,
@@ -346,13 +341,13 @@ class GaussianProcessWrapper:
             ]
         node_feature = np.asarray(node_info)  #(target,node,2 (features) )
         node_feature = node_feature.transpose(1, 0, 2).reshape(
-            self.node_coords.shape[0], -1)  #(node, target * feature)
+            node_coords.shape[0], -1)  #(node, target * feature)
         return node_feature
 
     def update_grids(self, time: float = None):
         '''
         update grids at time t
-        return: all_pred, all_std, preds
+        return: all_pred, all_std, preds, stds
         '''
         if time is None:
             raise ValueError
@@ -368,7 +363,7 @@ class GaussianProcessWrapper:
         # take minimum
         all_std = np.asarray(stds).min(axis=0)
 
-        return all_pred, all_std, preds
+        return all_pred, all_std, np.asarray(preds), np.asarray(stds)
 
     def get_high_info_idx(self,
                           source="detection",
