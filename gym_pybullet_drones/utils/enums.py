@@ -48,6 +48,7 @@ class ActionType(Enum):
     YAW_DIFF = "yaw_diff"  # diff 形式的 yaw_angle
     YAW_RATE = "yaw_rate"  # 角速度的形式
     YAW_RATE_DISCRETE = "yaw_rate_discrete"  # 离散的角速度选择
+    IPP_YAW = "ipp_yaw"  # IPP 的 yaw 控制
     ONE_D_RPM = "one_d_rpm"  # 1D (identical input to all motors) with RPMs
     ONE_D_PID = "one_d_pid"  # 1D (identical input to all motors) with PID control
 

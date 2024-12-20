@@ -23,7 +23,7 @@ class GraphController:
         self.act_type = act_type
         if self.act_type in [
                 ActionType.YAW, ActionType.YAW_DIFF, ActionType.YAW_RATE,
-                ActionType.YAW_RATE_DISCRETE
+                ActionType.YAW_RATE_DISCRETE, ActionType.IPP_YAW
         ]:
             self.DIM = 2  # 以单位圆上的点表示 yaw 角
 

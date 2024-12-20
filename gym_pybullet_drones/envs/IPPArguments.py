@@ -8,7 +8,7 @@ class IPPArguments:
         self.k_size = 8  # knn
         self.sample_num = 40
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
-        self.budget_range = np.array([5, 10])  # budget 为所经过路径的最大成本，在初始化时随机采样
+
         # 选取前 32 大的特征值，这里抛去第一大特征值，因此最大为 sample_num - 1
         self.num_eigen_value = min(32, self.sample_num - 1)
         ### parameter of attention_net

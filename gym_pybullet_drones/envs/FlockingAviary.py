@@ -648,6 +648,7 @@ class FlockingAviary(BaseRLAviary):
             target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
                                           dtype=np.float32)
             target_yaws_circle[self.control_by_RL_mask] = action
+
         elif self.ACT_TYPE == ActionType.YAW_RATE or self.ACT_TYPE == ActionType.YAW_RATE_DISCRETE:
             target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
                                           dtype=np.float32)
@@ -784,7 +785,7 @@ class FlockingAviary(BaseRLAviary):
             Dummy value.
 
         """
-        if self.OBS_TYPE == ObservationType.GAUSSIAN:
+        if self.OBS_TYPE in [ObservationType.GAUSSIAN, ObservationType.IPP]:
 
             def compute_reward(nth):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()

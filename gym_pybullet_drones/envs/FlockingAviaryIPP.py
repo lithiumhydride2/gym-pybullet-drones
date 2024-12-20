@@ -33,7 +33,7 @@ class FlockingAviaryIPP(FlockingAviary):
                  obs=ObservationType.GAUSSIAN,
                  act=ActionType.YAW,
                  random_point=True):
-        assert act == ActionType.YAW
+        assert act == ActionType.IPP_YAW
         super().__init__(drone_model, num_drones, control_by_RL_mask,
                          neighbourhood_radius, initial_xyzs, initial_rpys,
                          physics, pyb_freq, flocking_freq_hz, decision_freq_hz,
@@ -55,9 +55,6 @@ class FlockingAviaryIPP(FlockingAviary):
                 self.plot_online_stuff[f"gp_pred_{nth}"][1].scatter(
                     node_coords[:, 0], node_coords[:, 1], c='orchid')
                 plt.pause(1e-10)
-
-    def step(self):
-        return super().step()
 
     def reset(self, seed=None, options=None):
         '''
@@ -87,6 +84,10 @@ class FlockingAviaryIPP(FlockingAviary):
                 num_drone=self.NUM_DRONES,
                 node_coords=self.IPPEnvs[nth].node_coords)
         return super().reset(seed, options)
+
+    def _actionSpace(self):
+        if self.ACT_TYPE == ActionType.IPP_YAW:
+            return Discrete(IPPArg.sample_num)
 
     def _observationSpace(self):
         if self.OBS_TYPE == ObservationType.IPP:
@@ -147,20 +148,65 @@ class FlockingAviaryIPP(FlockingAviary):
         self.plot_online()
         return obs[self.control_by_RL_ID[0]]
 
+    def _preprocessAction(self, action):
+        """
+        使用 PID 控制将 action 转化为 RPM, yaw_action 后续也应该从此处产生 
+
+        Pre-processes the action passed to `.step()` into motors' RPMs.
+        Descriptions:
+            此处嵌套了 reynolds 用来计算高层速度控制指令
+
+        Parameters
+        ----------
+        action : ndarray
+            The desired target_yaw $$[cos(\theta), sin(\theta)]$$, to be translated into RPMs.
+
+        Returns
+        -------
+        ndarray
+            (NUM_DRONES, 4)-shaped array of ints containing to clipped RPMs
+            commanded to the 4 motors of each drone.
+
+        """
+        if self.step_counter % self.FLOCKING_PER_PYB == 0:
+            #### 更新 flocking 控制指令
+            # migration mask 为 control mask 取反
+            flocking_command = self._get_command_migration(
+                migration_mask=self.control_by_RL_mask
+            ) + self._get_command_reynolds()
+            command_norm = np.linalg.norm(flocking_command,
+                                          axis=1,
+                                          keepdims=True)
+            command_norm_safe = np.where(command_norm < 1e-10, 1, command_norm)
+            flocking_command = flocking_command / command_norm_safe
+            # 避免除0
+            self.target_vs = np.hstack(
+                (flocking_command,
+                 np.min((np.ones(
+                     command_norm.shape), command_norm / self.SPEED_LIMIT),
+                        axis=0)))  # 将最大速度限制在 speed_limit
+
+        if self.ACT_TYPE == ActionType.YAW:
+            # 将对于 control_by_RL_mask 决策的 action 嵌入 action_all
+            target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
+                                          dtype=np.float32)
+            target_yaws_circle[self.control_by_RL_mask] = action
+        elif self.ACT_TYPE == ActionType.IPP_YAW:
+            target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
+                                          dtype=np.float32)
+            for id in self.control_by_RL_ID:
+                target_yaws_circle[id] = self.IPPEnvs[id].node_coords[action]
+        target_yaws = circle_to_yaw(target_yaws_circle)
+        return self._computeRpmFromCommand(self.target_vs,
+                                           target_yaws=target_yaws)
+
     def _computeReward(self):
-        pass
-        return .0
+
+        return super()._computeReward()
 
     def _computeTerminated(self):
 
-        def outbudget():
-            ## 判断是否将 budget 消耗完
-            for nth in self.control_by_RL_ID:
-                if self.IPPEnvs[nth].budget < 0:
-                    return True
-            return False
-
-        return outbudget or super()._computeTerminated()
+        return super()._computeTerminated()
 
 
 class IPPenv:
@@ -179,10 +225,6 @@ class IPPenv:
         self.curr_node_index = 0  # 当前 node index
         self.yaw_start = yaw_start
         self.route_coord = [self.yaw_start]
-
-        self.budget_range = IPPArg.budget_range
-        self.budget = np.random.uniform(low=self.budget_range[0],
-                                        high=self.budget_range[1])
 
     @property
     def Obs(self):
@@ -229,29 +271,13 @@ class IPPenv:
         eigen_vector = eigen_vector[:, 1:IPPArg.num_eigen_value + 1]
         return np.asarray(eigen_vector)  #(graph_size, num_eigen_value)
 
-    def resample(self, curr_yaw):
-        '''
-        Description:
-        
-        Args:
-            curr_yaw: 当前yaw 角度
-        '''
-
-        # 必须到达当前 action 才能进行离散图的 resample? 吗
-        #TODO 如果在当前位置没有到达上次采样的位置，是否直接进行 resample
-        #TODO 这里考虑在航向角的语义下，使用固定的 action_space 即可？
-        self.node_coords, self.graph = self.graph_control.gen_graph(
-            curr_coord=curr_yaw,
-            samp_num=IPPArg.sample_num,
-            gen_range=IPPArg.gen_range)
-
     def reset(self, yaw_start):
         '''
         重新进行采样
         
         如何处理运行到一半的 action 呢？
         '''
-        # 重新采样 budget
+
         self.curr_node_index = 0
         self.yaw_start = yaw_start
         self.route_coord = [yaw_start]
@@ -260,9 +286,6 @@ class IPPenv:
             curr_coord=yaw_start,
             samp_num=IPPArg.sample_num,
             gen_range=IPPArg.gen_range)
-
-        self.budget = np.random.uniform(low=self.budget_range[0],
-                                        high=self.budget_range[1])
 
 
 if __name__ == "__main__":

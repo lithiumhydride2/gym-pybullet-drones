@@ -54,7 +54,7 @@ DEFAULT_COLAB = False
 DEFAULT_NUM_DRONE = 5
 
 DEFAULT_OBS_TYPE = ObservationType.IPP
-DEFAULT_ACT_TYPE = ActionType.YAW
+DEFAULT_ACT_TYPE = ActionType.IPP_YAW
 DEFAULT_FOV_CONFIG = FOVType.SINGLE
 
 DEFAULT_FLOCKING_FREQ = 10
@@ -155,8 +155,8 @@ def run(drone=DEFAULT_DRONE,
         obstacles=DEFAULT_OBSTACLES,
         simulation_freq_hz=DEFAULT_SIMULATION_FREQ_HZ,
         control_freq_hz=DEFAULT_CONTROL_FREQ_HZ,
-        flocking_freq_hz=10,
-        decision_freq_hz=5,
+        flocking_freq_hz=DEFAULT_FLOCKING_FREQ,
+        decision_freq_hz=DEFAULT_DECISION_FREQ,
         duration_sec=DEFAULT_DURATION_SEC,
         output_folder=DEFAULT_OUTPUT_FOLDER,
         default_flight_height=DEFAULT_FLIGHT_HEIGHT,
