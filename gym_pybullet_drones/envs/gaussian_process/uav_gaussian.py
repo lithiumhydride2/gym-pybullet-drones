@@ -192,7 +192,9 @@ class UAVGaussian():
                                               fov_vector=fov_vector,
                                               time=curr_time,
                                               node_coords=node_coords)
-        return {"node_features": node_feature}
+        # node_inputs 为 node_coords 与 node_feature 的结合
+        node_inputs = np.concatenate((self.node_coords, node_feature), axis=1)
+        return {"node_inputs": node_inputs}
 
     def DecisionStep(self, obs):
         '''

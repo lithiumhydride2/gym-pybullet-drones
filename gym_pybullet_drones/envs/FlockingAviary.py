@@ -191,9 +191,6 @@ class FlockingAviary(BaseRLAviary):
         self.VISABLE_DEGREE_THERSHOLD = 5  # in degree
         self.VISABLE_FAIL_DETECT = 0.05  # 5% 的概率无法检出目标
 
-        if self.USER_DEBUG:
-            self._gp_debug_init(self.USER_DEBUG)
-
     ################################################################################
     def _gp_debug_init(self, user_debug_gui):
         plt.close("all")

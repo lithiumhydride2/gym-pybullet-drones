@@ -101,7 +101,7 @@ class SingleHeadAttention(nn.Module):
 
 class MultiHeadAttention(nn.Module):
 
-    def __init__(self, embedding_dim, n_heads=IPPArg.N_HEADS):
+    def __init__(self, embedding_dim, n_heads=8):
         super(MultiHeadAttention, self).__init__()
         self.n_heads = n_heads
         self.input_dim = embedding_dim
@@ -275,14 +275,38 @@ class Decoder(nn.Module):
 
 class AttentionNet(nn.Module):
 
-    def __init__(self, input_dim, embedding_dim):
+    def __init__(self, embedding_dim):
+        '''
+        TODO: 初步搞清楚了输入与输出的维度关系， embedding 为线性层，输入的最后一个维度应为线性层的输入维度
+        '''
         super(AttentionNet, self).__init__()
-        self.initial_embedding = nn.Linear(
-            input_dim, embedding_dim)  # layer for non-end position
-        self.end_embedding = nn.Linear(
-            input_dim, embedding_dim)  # embedding layer for end position
-        self.budget_embedding = nn.Linear(embedding_dim + 2, embedding_dim)
+
+        self.node_coord_embedding = nn.Linear(IPPArg.NODE_COORD_DIM,
+                                              embedding_dim)
+        self.belief_embedding = nn.Linear(IPPArg.BELIEF_FEATURE_DIM,
+                                          embedding_dim)
+        self.target_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
+                                      n_head=IPPArg.N_HEAD,
+                                      n_layer=IPPArg.N_LAYER)
+        self.spatio_encoder = Encoder(embedding_dim=embedding_dim,
+                                      n_head=IPPArg.N_HEAD,
+                                      n_layer=IPPArg.N_LAYER)
+        self.spatio_pos_embedding = nn.Linear(IPPArg.num_eigen_value,
+                                              embedding_dim)
+        self.spatio_decoder = Decoder(
+            embedding_dim=IPPArg.EMBEDDING_DIM,
+            n_head=IPPArg.N_HEAD,
+            n_layer=IPPArg.N_LAYER
+        )  # 用作 node_feature 与 connect_node_feature 的 cross-attention
+        self.pointer = SingleHeadAttention(embedding_dim)
         self.value_output = nn.Linear(embedding_dim, 1)
+
+        ## 以上为再次添加
+        self.initial_embedding = nn.Linear(
+            2, embedding_dim)  # layer for non-end position
+        self.end_embedding = nn.Linear(
+            2, embedding_dim)  # embedding layer for end position
+        self.budget_embedding = nn.Linear(embedding_dim + 2, embedding_dim)
 
         if IPPArg.k_size >= 8:
             self.pos_embedding = nn.Linear(32, embedding_dim)
@@ -299,30 +323,40 @@ class AttentionNet(nn.Module):
         self.decoder = Decoder(embedding_dim=embedding_dim,
                                n_head=4,
                                n_layer=1)
-        self.pointer = SingleHeadAttention(embedding_dim)
 
         self.LSTM = nn.LSTM(embedding_dim, embedding_dim, batch_first=True)
 
-    def graph_embedding(self,
-                        node_inputs,
-                        edge_inputs,
-                        pos_encoding,
-                        mask=None):
-        # current_position (batch, 1, 2)
-        # end_position (batch, 1,2)
-        # node_inputs (batch, sample_size+2, 2) end position and start position are the first two in the inputs
-        # edge_inputs (batch, sample_size+2, k_size)
-        # mask (batch, sample_size+2, k_size)
-        # end_position = node_inputs[:, 0, :].unsqueeze(1)
-        # embedding_feature = torch.cat((self.end_embedding(end_position), self.initial_embedding(node_inputs[:, 1:, :])), dim=1)
-        embedding_feature = self.initial_embedding(node_inputs)  #[:, 1:, :])
+    def graph_embedding(self, node_inputs: torch.Tensor, mask=None):
+        """
+        Args:
+            node_inputs: (batch, graph_size, 2 + num_target * feature) , feature(mean,std) , 前两个维度为 node_coords
+            
+        """
 
-        pos_encoding = self.pos_embedding(pos_encoding)
-        embedding_feature = embedding_feature + pos_encoding
+        batch_size, graph_size, input_dim = node_inputs.shape
+        target_num = (input_dim - 2) // IPPArg.BELIEF_FEATURE_DIM
+        # reshape node_inputs , 消除 graph_size 的 dim
+        node_inputs = node_inputs.reshape(-1, 1, input_dim)
+        # node_coord_embedding 最后一个维度的前两部分为 node_coord
+        node_coord_embedding = self.node_coord_embedding(
+            node_inputs[:, :, :2])  #(batch,graph_size,embedding_dim)
+        # target belief embedding
+        target_belief_embedding = torch.cat(
+            [
+                self.belief_embedding(
+                    node_inputs[:, :, 2 + i * IPPArg.BELIEF_FEATURE_DIM:2 +
+                                (1 + i) * IPPArg.BELIEF_FEATURE_DIM])
+                for i in range(target_num)
+            ],
+            dim=1)  # (batch, graph_size  * target_num, embedding_dim)
 
-        embedding_feature = self.encoder(embedding_feature)
+        # embedded_feature
+        embedded_feature: torch.Tensor = self.target_encoder(
+            node_coord_embedding, target_belief_embedding)
+        embedded_feature = embedded_feature.reshape(batch_size, graph_size,
+                                                    IPPArg.EMBEDDING_DIM)
 
-        return embedding_feature
+        return embedded_feature
 
     def select_next_node(self, embedding_feature, edge_inputs, budget_inputs,
                          current_index, LSTM_h, LSTM_c, mask):
@@ -394,25 +428,80 @@ class AttentionNet(nn.Module):
 
         return logp_list, value, LSTM_h, LSTM_c
 
+    def spatio_attention(self,
+                         embedded_feature: torch.Tensor,
+                         edge_inputs: torch.Tensor,
+                         curr_index: torch.Tensor,
+                         pos_encoding,
+                         spatio_mask=None):
+        '''
+        Args:
+            embedded_feature : (batch, graph_size, embedding_dim)
+            edge_inputs: (batch, graph_size, k_size), k_size for KNN , 连接关系
+            pos_encoding: (batch. graph_size, num_eigen_value ), 图的 laplace 矩阵的 eigen_value 
+            curr_index: (batch, 1 , 1) curr_index in range(0,graph_size)
+        '''
+        batch_size, graph_size, knn_size = edge_inputs.shape
+        current_edge = torch.gather(
+            edge_inputs, dim=1, index=curr_index.repeat(
+                1, 1, knn_size))  # 仅在 knn_size 维度repeat , (batch,1, knn_size)
+        current_edge = current_edge.permute(
+            0, 2, 1)  # (batch, knn_size , 1) ,1 is for current node
+
+        if spatio_mask is None:
+            mask = torch.zeros((batch_size, 1, knn_size), dtype=torch.bool)
+        else:
+            pass
+        # eigen_value 矩阵的 fature
+        embedded_feature += self.spatio_pos_embedding(pos_encoding)
+        # self attention for embedded featute
+        embedded_feature = self.spatio_encoder(embedded_feature)
+
+        ## dist_inputs todo, 此处未添加
+
+        # 提取 node feature
+        curr_node_feature = torch.gather(embedded_feature,
+                                         dim=1,
+                                         index=curr_index.repeat(
+                                             1, 1, IPPArg.EMBEDDING_DIM))
+        connected_nodes_feature = torch.gather(embedded_feature,
+                                               dim=1,
+                                               index=current_edge.repeat(
+                                                   1, 1, IPPArg.EMBEDDING_DIM))
+        embedded_spatio_feature = self.spatio_decoder(curr_node_feature,
+                                                      connected_nodes_feature,
+                                                      mask)
+        # 做 embedded_spatio_feature 与 connected_nodes_feature 的 cross-attention, 输出 logp_list
+        logp_list: torch.Tensor = self.pointer(embedded_spatio_feature,
+                                               connected_nodes_feature, mask)
+        logp_list = logp_list.squeeze(dim=1)  # 去除冗余维度
+        value = self.value_output(embedded_spatio_feature)
+
+        return logp_list, value
+
     def forward(self,
                 node_inputs,
                 edge_inputs,
-                budget_inputs,
-                current_index,
-                LSTM_h,
-                LSTM_c,
+                current_index: torch.Tensor,
                 pos_encoding,
                 mask=None):
+        """
+        Args:
+            node_inputs: (batch, graph_size, num_target * feature) , feature(mean,std)
+            edge_inputs: (batch, graph_size, k_size), k_size for KNN , 连接关系
+            pos_encoding: (batch, graph_size, num_eigen_value) , 图的 laplace 矩阵的 eigen_value 
+            current_index: (batch, 1 , 1) curr_index in range(0,graph_size)
+        """
         # 此处为 attention_net的 forward, PPO 部分在哪里？
+        current_index = current_index.to(torch.int64)
         with autocast():
-            embedding_feature = self.graph_embedding(node_inputs,
+            embedded_feature = self.graph_embedding(node_inputs, mask=mask)
+            logp_list, value = self.spatio_attention(embedded_feature,
                                                      edge_inputs,
+                                                     current_index,
                                                      pos_encoding,
-                                                     mask=None)
-            logp_list, value, LSTM_h, LSTM_c = self.select_next_node(
-                embedding_feature, edge_inputs, budget_inputs, current_index,
-                LSTM_h, LSTM_c, mask)
-        return logp_list, value, LSTM_h, LSTM_c
+                                                     spatio_mask=None)
+        return logp_list, value
 
 
 def padding_inputs(inputs):

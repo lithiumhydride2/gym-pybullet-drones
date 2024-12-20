@@ -5,17 +5,20 @@ class IPPArguments:
 
     def __init__(self):
         #### graph
-        self.k_size = 5  # knn
-        self.sample_num = 10
-        self.gen_range = np.deg2rad([0, 90])  # 限制采样的范围
+        self.k_size = 8  # knn
+        self.sample_num = 40
+        self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
         self.budget_range = np.array([5, 10])  # budget 为所经过路径的最大成本，在初始化时随机采样
         # 选取前 32 大的特征值，这里抛去第一大特征值，因此最大为 sample_num - 1
         self.num_eigen_value = min(32, self.sample_num - 1)
         ### parameter of attention_net
-        self.INPUT_DIM = 6
+        self.FEATURE_DIM = 10086  # 用于初始化 custom policy, 似乎没有作用
         self.EMBEDDING_DIM = 128
-        self.N_HEADS = 4
+        self.N_HEAD = 4  # head num of decoder
+        self.N_LAYER = 1
         self.ADAPTIVE_TH = 0.4  # what's this
+        self.NODE_COORD_DIM = 2
+        self.BELIEF_FEATURE_DIM = 2  # mean and std
 
 
 IPPArg = IPPArguments()

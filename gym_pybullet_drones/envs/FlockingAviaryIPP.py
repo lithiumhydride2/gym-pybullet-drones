@@ -91,12 +91,12 @@ class FlockingAviaryIPP(FlockingAviary):
     def _observationSpace(self):
         if self.OBS_TYPE == ObservationType.IPP:
             return Dict({
-                "node_features":
+                "node_inputs":
                 Box(
                     low=0.,
                     high=1.,
-                    shape=(IPPArg.sample_num,
-                           (self.NUM_DRONES - 1) * 2),  # mean and std
+                    shape=(IPPArg.sample_num, 2 + (self.NUM_DRONES - 1) *
+                           2),  # node_coord and feature (target * (mean,std))
                     dtype=np.float32),
                 "edge_inputs":
                 Box(low=0,
@@ -107,7 +107,7 @@ class FlockingAviaryIPP(FlockingAviary):
                 Box(low=0,
                     high=IPPArg.sample_num - 1,
                     shape=(1, 1),
-                    dtype=np.int32),
+                    dtype=np.int64),
                 "graph_pos_encoding":
                 Box(low=0.,
                     high=1.,
