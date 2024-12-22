@@ -94,9 +94,9 @@ def yaw_to_circle(yaw):
     '''
     将任意 yaw 角以单位圆上的点来表示
     '''
-    yaw = np.array(yaw)
-    circle = np.array([np.sin(yaw), np.cos(yaw)])
-    return circle.reshape(-1, 2)
+    yaw = np.array(yaw).reshape(-1, 1)
+    circle = np.hstack([np.cos(yaw), np.sin(yaw)])
+    return circle
 
 
 def circle_to_yaw(circile):
