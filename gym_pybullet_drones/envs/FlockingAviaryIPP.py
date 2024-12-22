@@ -154,7 +154,7 @@ class FlockingAviaryIPP(FlockingAviary):
                 other_pose_mask[nth] = False
 
                 gaussian_obs = self.decisions[nth].step(
-                    curr_time=self.CurrTime,
+                    curr_time=self.curr_time,
                     detection_map=self._computePositionEstimation(
                         adjacency_Mat, nth),
                     ego_heading=circle_to_yaw(
@@ -220,14 +220,6 @@ class FlockingAviaryIPP(FlockingAviary):
         target_yaws = circle_to_yaw(target_yaws_circle)
         return self._computeRpmFromCommand(self.target_vs,
                                            target_yaws=target_yaws)
-
-    def _computeReward(self):
-
-        return super()._computeReward()
-
-    def _computeTerminated(self):
-
-        return super()._computeTerminated()
 
 
 class IPPenv:

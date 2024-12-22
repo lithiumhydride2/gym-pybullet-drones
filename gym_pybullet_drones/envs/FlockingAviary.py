@@ -18,6 +18,7 @@ from gym_pybullet_drones.envs.gaussian_process.uav_gaussian import UAVGaussian a
 from scipy.spatial.transform import Rotation as R
 from gym_pybullet_drones.utils.utils import *
 import matplotlib.pyplot as plt
+from .IPPArguments import IPPArg
 
 
 class FlockingAviary(BaseRLAviary):
@@ -731,7 +732,7 @@ class FlockingAviary(BaseRLAviary):
                     other_pose_mask = np.ones((self.NUM_DRONES, ))
                     other_pose_mask[nth] = .0
                     obs_nth = self.decisions[nth].step(
-                        curr_time=self.CurrTime,
+                        curr_time=self.curr_time,
                         detection_map=self._computePositionEstimation(
                             adjacency_Mat, nth),
                         ego_heading=circle_to_yaw(
@@ -793,7 +794,7 @@ class FlockingAviary(BaseRLAviary):
                     nth].GP_ground_truth.get_high_info_indx(ground_truth)
                 ## Unc update reward
                 _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
-                    self.CurrTime, high_info_idx, return_all=True)
+                    self.curr_time, high_info_idx, return_all=True)
                 unc_list = np.asarray(unc_list)
                 unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
                 unc_update = self.cache['unc'][nth] - unc_list
@@ -851,6 +852,10 @@ class FlockingAviary(BaseRLAviary):
             if np.min(relative_distance) > 3.4:
                 if self.USER_DEBUG:
                     print("Terminated too close")
+                return True
+            if self.curr_time > IPPArg.MAX_EPISODE_LEN:
+                if self.USER_DEBUG:
+                    print("Terminated max episode length")
                 return True
             return False
 

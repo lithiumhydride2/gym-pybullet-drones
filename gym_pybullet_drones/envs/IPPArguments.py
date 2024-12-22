@@ -4,6 +4,8 @@ import numpy as np
 class IPPArguments:
 
     def __init__(self):
+        #### env
+        self.MAX_EPISODE_LEN = 180  # max length of an episode / s
         #### graph
         self.k_size = 5  # knn
         self.sample_num = 40

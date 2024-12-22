@@ -36,11 +36,11 @@ from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationT
 from gymnasium.envs.registration import register
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
-DEFAULT_GUI = True  # 默认不启用 gui
-DEFAULT_USER_DEBUG_GUI = True  # user debug gui, 包含 gp_heatmap
+# DEFAULT_GUI = True  # 默认不启用 gui
+# DEFAULT_USER_DEBUG_GUI = True  # user debug gui, 包含 gp_heatmap
 ## change gui
-# DEFAULT_GUI = False
-# DEFAULT_USER_DEBUG_GUI = False
+DEFAULT_GUI = False
+DEFAULT_USER_DEBUG_GUI = False
 
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True

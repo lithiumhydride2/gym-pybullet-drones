@@ -60,7 +60,7 @@ def main():
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
 
         # action, _states = model.predict(obs, deterministic=True)
-        action = yaw_test(test_env.CurrTime)
+        action = yaw_test(test_env.curr_time)
         print("Action is : {}".format(action))
         obs, reward, terminated, truncated, info = test_env.step(action)
 
