@@ -52,9 +52,25 @@ class FlockingAviaryIPP(FlockingAviary):
         if self.USER_DEBUG:
             for nth in self.control_by_RL_ID:
                 node_coords = self.IPPEnvs[nth].node_coords
+                curr_index = self.IPPEnvs[nth].curr_node_index
                 self.plot_online_stuff[f"gp_pred_{nth}"][1].scatter(
                     node_coords[:, 0], node_coords[:, 1], c='orchid')
+                self.plot_online_stuff[f"gp_pred_{nth}"][1].scatter(
+                    node_coords[curr_index, 0],
+                    node_coords[curr_index, 1],
+                    c="red")
                 plt.pause(1e-10)
+
+    def step(self, action):
+        # 使用当前 obs 后处理 action
+        curr_index = self.cache["obs"][self.control_by_RL_ID[0]]["curr_index"]
+        edge_inputs = self.cache["obs"][
+            self.control_by_RL_ID[0]]["edge_inputs"]
+        subprocess_action = edge_inputs[curr_index.item(), action.item()]
+
+        self.IPPEnvs[self.control_by_RL_ID[0]].step(subprocess_action)
+        # step 中重新计算 obs 与 action
+        return super().step(subprocess_action)
 
     def reset(self, seed=None, options=None):
         '''
@@ -86,8 +102,11 @@ class FlockingAviaryIPP(FlockingAviary):
         return super().reset(seed, options)
 
     def _actionSpace(self):
+        '''
+        IPP_YAW 模式下，选取动作方式为从当前 node_coords 的邻居中选取下一个节点
+        '''
         if self.ACT_TYPE == ActionType.IPP_YAW:
-            return Discrete(IPPArg.sample_num)
+            return Discrete(IPPArg.k_size)
 
     def _observationSpace(self):
         if self.OBS_TYPE == ObservationType.IPP:
@@ -138,13 +157,15 @@ class FlockingAviaryIPP(FlockingAviary):
                     curr_time=self.CurrTime,
                     detection_map=self._computePositionEstimation(
                         adjacency_Mat, nth),
-                    ego_heading=circle_to_yaw(self._computeHeading(nth)[:2]),
+                    ego_heading=circle_to_yaw(
+                        self._computeHeading(nth)[:2].reshape(-1, 2)),
                     fov_vector=self._computeFovVector(nth),
                     relative_pose=relative_position[nth][other_pose_mask],
                     node_coords=self.IPPEnvs[nth].node_coords)
                 # 合并两个 obs
                 obs[nth] = gaussian_obs | self.IPPEnvs[nth].Obs
-
+        # cache for action subprocess
+        self.cache["obs"] = obs
         self.plot_online()
         return obs[self.control_by_RL_ID[0]]
 
@@ -215,7 +236,8 @@ class IPPenv:
 
         self.graph_control = GraphController(start=yaw_start,
                                              k_size=IPPArg.k_size,
-                                             act_type=act_type)
+                                             act_type=act_type,
+                                             random_sample=False)
         #生成图
         self.node_coords, self.graph = self.graph_control.gen_graph(
             curr_coord=yaw_start,
@@ -286,6 +308,13 @@ class IPPenv:
             curr_coord=yaw_start,
             samp_num=IPPArg.sample_num,
             gen_range=IPPArg.gen_range)
+
+    def step(self, action):
+        '''
+        通过 action 更新当前节点
+        '''
+        self.curr_node_index = action
+        self.route_coord.append(self.node_coords[action])
 
 
 if __name__ == "__main__":

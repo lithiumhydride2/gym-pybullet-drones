@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 from .graph import Graph, dijkstra, to_array
 from .enums import ActionType
-from .utils import circle_angle_diff, yaw_to_circle
+from .utils import circle_angle_diff, yaw_to_circle, circle_to_yaw
 
 
 class GraphController:
@@ -11,12 +11,17 @@ class GraphController:
     Graph Controller
     """
 
-    def __init__(self, start, k_size, act_type: ActionType):
+    def __init__(self,
+                 start,
+                 k_size,
+                 act_type: ActionType,
+                 random_sample=True):
         '''
         Args:
             start: 在图中的起点
             k_size: k 近邻算法的 k 值
             act: type of act
+            random_sample: 是否随机采样，否则在 range 内均匀采样
         '''
         self.graph = Graph()
         self.k_size = k_size
@@ -29,6 +34,7 @@ class GraphController:
 
         self.start = np.array(start).reshape(1, self.DIM)
         self.node_coords = self.start
+        self.random_sample = random_sample
         self.dijkstra_dist = []
         self.dijkstra_prev = []
 
@@ -44,23 +50,29 @@ class GraphController:
         self.dijkstra_prev = []
         self.graph = Graph()
         self.node_coords = curr_coord.reshape(1, self.DIM)
-        count = 1
-        # 需要在单位圆上进行采样
-        while count < samp_num:
-            new_coord = yaw_to_circle(np.random.uniform(.0,
-                                                        2 * np.pi)).reshape(
-                                                            1, self.DIM)
-            # 限制采样的范围
-            if circle_angle_diff(
-                    curr_coord,
-                    new_coord[0]) < gen_range[1] and circle_angle_diff(
-                        curr_coord, new_coord[0]) > gen_range[0]:
-                if count == 0:
-                    self.node_coords = new_coord
-                else:
-                    self.node_coords = np.concatenate(
-                        (self.node_coords, new_coord), axis=0)
-                count += 1
+        if self.random_sample:
+            count = 1
+            # 需要在单位圆上进行采样
+            while count < samp_num:
+                new_coord = yaw_to_circle(np.random.uniform(
+                    .0, 2 * np.pi)).reshape(1, self.DIM)
+                # 限制采样的范围
+                if circle_angle_diff(
+                        curr_coord,
+                        new_coord[0]) < gen_range[1] and circle_angle_diff(
+                            curr_coord, new_coord[0]) > gen_range[0]:
+                    if count == 0:
+                        self.node_coords = new_coord
+                    else:
+                        self.node_coords = np.concatenate(
+                            (self.node_coords, new_coord), axis=0)
+                    count += 1
+        else:
+
+            self.node_coords = yaw_to_circle(
+                np.linspace(
+                    -gen_range[1], gen_range[1], samp_num, endpoint=False) +
+                circle_to_yaw(curr_coord.reshape(-1, 2)))
 
         self.findNearestNeighbour(k=self.k_size)
         self.calcAllPathCost()

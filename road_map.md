@@ -58,6 +58,8 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [] budget 在 IPP 中用于判断下一个节点是否可达，我似乎并不需要这样一个 budget
   - [x] 这个 budget 可以用于现在在 knn 中的连接，因为我们需要限制过大的 yaw action
 - [] 那么现在输入为增广图， 已执行过的路径，这是一个简化
+
+- [] 按照我的理解 ，我的 action_net 与 value_net 已经包含在 attention_net 之中
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash

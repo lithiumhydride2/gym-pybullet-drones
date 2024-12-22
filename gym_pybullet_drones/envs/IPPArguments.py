@@ -5,7 +5,7 @@ class IPPArguments:
 
     def __init__(self):
         #### graph
-        self.k_size = 8  # knn
+        self.k_size = 5  # knn
         self.sample_num = 40
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
 

@@ -676,7 +676,7 @@ class BaseAviary(gym.Env):
         '''
         return self.step_counter * self.PYB_TIMESTEP
 
-    def _computeHeading(self, nth_drone):
+    def _computeHeading(self, nth_drone) -> np.ndarray:
         '''
             计算无人机世界坐标系下的偏航角，以单位圆上点的形式， 将四元数转化为相对世界坐标系的旋转
         '''

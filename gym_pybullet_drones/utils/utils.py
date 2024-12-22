@@ -103,7 +103,8 @@ def circle_to_yaw(circile):
     '''
     将单位圆上任意点 circle 转换为 (-pi,pi] 内的 yaw 角
     '''
-    circile = np.array(circile).reshape(-1, 2)
+    circile = np.array(circile)
+    assert circile.shape[1] == 2
     yaw = np.arctan2(circile[:, 1], circile[:, 0])
     return yaw
 

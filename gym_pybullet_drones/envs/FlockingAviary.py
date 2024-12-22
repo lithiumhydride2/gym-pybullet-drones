@@ -735,7 +735,7 @@ class FlockingAviary(BaseRLAviary):
                         detection_map=self._computePositionEstimation(
                             adjacency_Mat, nth),
                         ego_heading=circle_to_yaw(
-                            self._computeHeading(nth)[:2]),
+                            self._computeHeading(nth)[:2].reshape(-1, 2)),
                         fov_vector=self._computeFovVector(nth),
                         relative_pose=relative_position[nth][
                             other_pose_mask.astype(bool)])
@@ -839,12 +839,18 @@ class FlockingAviary(BaseRLAviary):
                                                axis=1)[other_mask]
             # 无人机间最小距离小于 1.0 m
             if np.min(relative_distance) < 1.0:
+                if self.USER_DEBUG:
+                    print("Terminated min distance")
                 return True
             # truncted when fly too low
             if drone_states[nth][2] < 1.5:
+                if self.USER_DEBUG:
+                    print("Terminated fly too low")
                 return True
             # nth 无人机与其余无人机最小距离大于 x
             if np.min(relative_distance) > 3.4:
+                if self.USER_DEBUG:
+                    print("Terminated too close")
                 return True
             return False
 
@@ -870,6 +876,8 @@ class FlockingAviary(BaseRLAviary):
             # truncate when a drone is too tilted
             if abs(drone_states[nth][7]) > .4 or abs(
                     drone_states[nth][8]) > .4:
+                if self.USER_DEBUG:
+                    print("Truncated too tilted")
                 return True
             return False
 

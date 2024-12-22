@@ -409,7 +409,8 @@ class AttentionNet(nn.Module):
                                                      current_index,
                                                      pos_encoding,
                                                      spatio_mask=None)
-        return logp_list, value
+        # 不返回 value, value_net 由 stable_baselines3 自动添加
+        return logp_list
 
 
 if __name__ == '__main__':
