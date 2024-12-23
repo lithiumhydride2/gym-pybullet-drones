@@ -65,7 +65,7 @@ class GaussianProcessTorch():
 
     def update_grid(self, t):
         '''
-        predict using gaussian process with grid, and storage it.
+        predict using gaussian process with grid, and storage it. Assume t is current time
         '''
         if self.curr_t == t:
             return self.cache["y_pred_at_grid"], self.cache["std_at_grid"]
@@ -79,6 +79,17 @@ class GaussianProcessTorch():
         self.cache["y_pred_at_grid"] = mean
         self.cache["std_at_grid"] = std
         return self.cache["y_pred_at_grid"], self.cache["std_at_grid"]
+
+    def predict_grid(self, t):
+        '''
+        predict using gaussian process with grid, and storage it. Assume t is future time.
+        '''
+
+        grid_with_t = torch.from_numpy(add_t(self.grid, t)).to(self.device)
+        predict_grid = self.gp_torch.predict(grid_with_t)
+        mean = predict_grid.mean.cpu().detach().numpy()
+        std = predict_grid.stddev.cpu().detach().numpy()
+        return mean, std
 
     def update_node(self, t, node_coords):
         '''

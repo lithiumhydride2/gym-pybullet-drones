@@ -1,10 +1,11 @@
 import numpy as np
-
+import torch
 from gym_pybullet_drones.envs.gaussian_process.gaussian_process import GaussianProcessGroundTruth
 from gym_pybullet_drones.envs.gaussian_process.gaussian_process import GaussianProcessWrapper
 from gym_pybullet_drones.envs.gaussian_process.UCB.tsp_base_line import TSPBaseLine
 from gym_pybullet_drones.utils.utils import *
 from scipy.spatial.transform import Rotation as R
+from gym_pybullet_drones.envs.IPPArguments import IPPArg
 
 
 def add_t(X, t: float):
@@ -65,6 +66,12 @@ class UAVGaussian():
         self.ego_heading = 0.0  # 自身朝向状态量
         self.last_ego_heading = 0.0  # 上一个朝向状态量
         self.last_yaw_action = 0.0  # 上一个朝向输出
+
+        # avgpool
+        self.avgpool = torch.nn.AvgPool1d(kernel_size=IPPArg.history_stride,
+                                          stride=IPPArg.history_stride,
+                                          ceil_mode=True)
+        self.last_time = 0.0
 
     def _get_FOV_masks_of_node(self):
         # node_coords 在世界坐标系下,对于每个 node 生成一个 FOV_mask
@@ -130,6 +137,9 @@ class UAVGaussian():
 
         依赖 self.cache["preds"], self.cache["stds"]
         '''
+        # 获取预测的特征
+        _, _, predict_preds, predict_stds = self.GP_detection.update_grids(
+            self.curr_time + IPPArg.PREDICT_FEATURE_TIME, predict_future=True)
         node_feature = []
         pred: np.ndarray
 
@@ -139,10 +149,14 @@ class UAVGaussian():
                 feature.append(compare(grid[mask.astype(bool)]))
             return np.asarray(feature)
 
-        for pred, std in zip(self.cache["preds"], self.cache["stds"]):
+        for pred, std, predict_pred, predict_std in zip(
+                self.cache["preds"], self.cache["stds"], predict_preds,
+                predict_stds):
             node_feature += [
                 np.hstack((get_feature(pred, np.max).reshape(-1, 1),
-                           get_feature(std, np.min).reshape(-1, 1)))
+                           get_feature(std, np.min).reshape(-1, 1),
+                           get_feature(predict_pred, np.max).reshape(-1, 1),
+                           get_feature(predict_std, np.min).reshape(-1, 1)))
             ]
         node_feature = np.asarray(node_feature)  #(target,node,feature(2))
         node_feature = node_feature.transpose(1, 0, 2).reshape(
@@ -194,7 +208,39 @@ class UAVGaussian():
                                               node_coords=node_coords)
         # node_inputs 为 node_coords 与 node_feature 的结合
         node_inputs = np.concatenate((self.node_coords, node_feature), axis=1)
-        return {"node_inputs": node_inputs}
+        history_pool_inputs, dt_pool_inputs = self.avg_pool_node_inputs(
+            node_inputs)
+
+        self.last_time = curr_time
+        return {
+            "node_inputs": history_pool_inputs,
+            "dt_pool_inputs": dt_pool_inputs
+        }
+
+    def avg_pool_node_inputs(self, node_inputs):
+        node_inputs = torch.Tensor(node_inputs).unsqueeze(0)
+        # env.reset()时， 会重新 init UAVGaussian, 因此通过判断是否有 node_inputs_history
+        if not hasattr(self, "node_inputs_history"):
+            self.node_inputs_history = node_inputs.repeat(
+                IPPArg.history_size, 1,
+                1)  #(history_size, node_num, feature_dim)
+            self.dt_history = torch.zeros((IPPArg.history_size, 1))
+        else:
+            # 添加新的历史
+            self.node_inputs_history = torch.cat(
+                (self.node_inputs_history[1:], node_inputs.clone()), dim=0)
+            self.dt_history -= (self.curr_time -
+                                self.last_time) / IPPArg.dt_normlization
+            self.dt_history = torch.cat(
+                (self.dt_history[1:], torch.Tensor([[.0]])), dim=0)
+
+        ## avgpool 在最后一个维度上进行
+        history_pool_node_inputs: torch.Tensor = self.avgpool(
+            self.node_inputs_history.permute(1, 2, 0)).permute(
+                2, 0, 1)  #(history_size, node_num, feature_dim)
+        history_pool_dt = self.avgpool(self.dt_history.permute(1, 0)).permute(
+            1, 0)
+        return history_pool_node_inputs.numpy(), history_pool_dt.numpy()
 
     def DecisionStep(self, obs):
         '''

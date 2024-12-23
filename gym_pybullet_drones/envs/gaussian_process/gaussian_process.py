@@ -344,7 +344,7 @@ class GaussianProcessWrapper:
             node_coords.shape[0], -1)  #(node, target * feature)
         return node_feature
 
-    def update_grids(self, time: float = None):
+    def update_grids(self, time: float = None, predict_future=False):
         '''
         update grids at time t
         return: all_pred, all_std, preds, stds
@@ -355,14 +355,16 @@ class GaussianProcessWrapper:
         preds = []
         stds = []
         for gp in self.GPs:
-            pred_temp, std_temp = gp.update_grid(time)
+            if predict_future:
+                pred_temp, std_temp = gp.predict_grid(time)
+            else:
+                pred_temp, std_temp = gp.update_grid(time)
             preds.append(pred_temp.squeeze())
             stds.append(std_temp.squeeze())
         # take maximum
         all_pred = np.asarray(preds).max(axis=0)
         # take minimum
         all_std = np.asarray(stds).min(axis=0)
-
         return all_pred, all_std, np.asarray(preds), np.asarray(stds)
 
     def get_high_info_idx(self,

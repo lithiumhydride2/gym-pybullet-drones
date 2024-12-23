@@ -23,12 +23,14 @@ class IPPFeaturesExtractor(BaseFeaturesExtractor):
             return in shape (batch_size, features_dim )
         '''
         # stable_baselines3 自动转换observation并添加 batch dim
+
         return self.attention_net(
             node_inputs=observation["node_inputs"],
+            dt_pool_inputs=observation["dt_pool_inputs"],
             edge_inputs=observation["edge_inputs"],
             current_index=observation["curr_index"],
             pos_encoding=observation["graph_pos_encoding"],
-        )
+            dist_inputs=observation["dist_inputs"])
 
 
 class IPPActorCriticPolicy(ActorCriticPolicy):

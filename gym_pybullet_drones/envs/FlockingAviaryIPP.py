@@ -115,8 +115,15 @@ class FlockingAviaryIPP(FlockingAviary):
                 Box(
                     low=0.,
                     high=1.,
-                    shape=(IPPArg.sample_num, 2 + (self.NUM_DRONES - 1) *
-                           2),  # node_coord and feature (target * (mean,std))
+                    shape=(
+                        IPPArg.history_size // IPPArg.history_stride,
+                        IPPArg.sample_num, 2 + (self.NUM_DRONES - 1) * 4
+                    ),  # node_coord and feature (target * (mean,std,pred_mean,pred_std))
+                    dtype=np.float32),
+                "dt_pool_inputs":
+                Box(low=-np.inf,
+                    high=0.,
+                    shape=(IPPArg.history_size // IPPArg.history_stride, 1),
                     dtype=np.float32),
                 "edge_inputs":
                 Box(low=0,
@@ -132,6 +139,11 @@ class FlockingAviaryIPP(FlockingAviary):
                 Box(low=0.,
                     high=1.,
                     shape=(IPPArg.sample_num, IPPArg.num_eigen_value),
+                    dtype=np.float32),
+                "dist_inputs":
+                Box(low=0.,
+                    high=1.,
+                    shape=(IPPArg.sample_num, 1),
                     dtype=np.float32)
             })
 
@@ -258,11 +270,22 @@ class IPPenv:
         graph_pos_encoding = self.graph_pos_encoding(edge_inputs)
         ### curr_index
         curr_index = np.asarray(self.curr_node_index).reshape(-1, 1)
+        dist_inputs = self.calc_distance_of_nodes(
+            curr_index) / np.pi  # 使用 np.pi 归一化
         return {
             "edge_inputs": edge_inputs,
             "curr_index": curr_index,
-            "graph_pos_encoding": graph_pos_encoding
+            "graph_pos_encoding": graph_pos_encoding,
+            "dist_inputs": dist_inputs
         }
+
+    def calc_distance_of_nodes(self, current_index):
+        all_dist = []
+        current_coord = self.node_coords[current_index.item()]
+        for i in range(IPPArg.sample_num):
+            all_dist.append(
+                circle_angle_diff(current_coord, self.node_coords[i]))
+        return np.asarray(all_dist).reshape(-1, 1)
 
     def graph_pos_encoding(self, edge_inputs):
         '''

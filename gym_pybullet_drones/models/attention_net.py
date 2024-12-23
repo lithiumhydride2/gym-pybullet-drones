@@ -196,8 +196,8 @@ class Normalization(nn.Module):
         self.normalizer = nn.LayerNorm(embedding_dim)
 
     def forward(self, input):
-        return self.normalizer(input.view(-1,
-                                          input.size(-1))).view(*input.size())
+        return self.normalizer(input.contiguous().view(
+            -1, input.size(-1))).view(*input.size())
 
 
 class EncoderLayer(nn.Module):
@@ -288,9 +288,14 @@ class AttentionNet(nn.Module):
         self.target_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
                                       n_head=IPPArg.N_HEAD,
                                       n_layer=IPPArg.N_LAYER)
+        self.temporal_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
+                                        n_head=IPPArg.N_HEAD,
+                                        n_layer=IPPArg.N_LAYER)
+        self.timefusion_layer = nn.Linear(1, embedding_dim)
         self.spatio_encoder = Encoder(embedding_dim=embedding_dim,
                                       n_head=IPPArg.N_HEAD,
                                       n_layer=IPPArg.N_LAYER)
+        self.distfusion_layer = nn.Linear(embedding_dim + 1, embedding_dim)
         self.spatio_pos_embedding = nn.Linear(IPPArg.num_eigen_value,
                                               embedding_dim)
         self.spatio_decoder = Decoder(
@@ -299,24 +304,25 @@ class AttentionNet(nn.Module):
             n_layer=IPPArg.N_LAYER
         )  # 用作 node_feature 与 connect_node_feature 的 cross-attention
         self.pointer = SingleHeadAttention(embedding_dim)
-        self.value_output = nn.Linear(embedding_dim, 1)
 
-        ## 以上为再次添加
-
-    def graph_embedding(self, node_inputs: torch.Tensor, mask=None):
+    def graph_embedding(self,
+                        node_inputs: torch.Tensor,
+                        dt_pool_inputs: torch.Tensor,
+                        mask=None):
         """
         Args:
-            node_inputs: (batch, graph_size, 2 + num_target * feature) , feature(mean,std) , 前两个维度为 node_coords
-            
+            node_inputs: (batch, history_size, graph_size,2 +  num_target * feature) , feature(mean,std)
+            dt_pool_inputs: (batch, history_size, 1)
         """
 
-        batch_size, graph_size, input_dim = node_inputs.shape
+        batch_size, history_size, graph_size, input_dim = node_inputs.shape
         target_num = (input_dim - 2) // IPPArg.BELIEF_FEATURE_DIM
         # reshape node_inputs , 消除 graph_size 的 dim
         node_inputs = node_inputs.reshape(-1, 1, input_dim)
         # node_coord_embedding 最后一个维度的前两部分为 node_coord
         node_coord_embedding = self.node_coord_embedding(
-            node_inputs[:, :, :2])  #(batch,graph_size,embedding_dim)
+            node_inputs[:, :, :2]
+        )  #(graph_size * history_size , 1,embedding_dim)
         # target belief embedding
         target_belief_embedding = torch.cat(
             [
@@ -325,21 +331,42 @@ class AttentionNet(nn.Module):
                                 (1 + i) * IPPArg.BELIEF_FEATURE_DIM])
                 for i in range(target_num)
             ],
-            dim=1)  # (batch, graph_size  * target_num, embedding_dim)
+            dim=1)  # (graph_size * history_size , target_num, embedding_dim)
 
         # embedded_feature
+        embedded_feature = torch.cat(
+            (node_coord_embedding, target_belief_embedding), dim=1)
         embedded_feature: torch.Tensor = self.target_encoder(
-            node_coord_embedding, target_belief_embedding)
-        embedded_feature = embedded_feature.reshape(batch_size, graph_size,
+            node_coord_embedding, embedded_feature
+        )  #(batch_size * history_size * graph_size, 1, embedding_dim)
+        embedded_feature = embedded_feature.reshape(batch_size, history_size,
+                                                    graph_size,
                                                     IPPArg.EMBEDDING_DIM)
+        # 将 batch_size 和 graph_size 压缩
+        embedded_feature = embedded_feature.permute(0, 2, 1, 3).reshape(
+            -1, history_size, IPPArg.EMBEDDING_DIM
+        )  #(batch_size, graph_size,histroy_size, embedding_dim)
 
-        return embedded_feature
+        # 处理 dt_pool_inputs 特征， 需有 （batch_size * graph_size, history_size, 1）的维度
+        dt_pool_inputs = dt_pool_inputs.unsqueeze(1).repeat(
+            1, graph_size, 1, 1).reshape(-1, history_size, 1)
+
+        ## timefusion layer
+        embedded_feature += self.timefusion_layer(dt_pool_inputs)
+
+        ### 使用最新特征与其他历史特征做 cross-attention
+        embedded_temporal_feature: torch.Tensor = self.temporal_encoder(
+            embedded_feature[:, -1:, :].contiguous(), embedded_feature)
+        embedded_temporal_feature = embedded_temporal_feature.reshape(
+            batch_size, graph_size, IPPArg.EMBEDDING_DIM)
+        return embedded_temporal_feature
 
     def spatio_attention(self,
                          embedded_feature: torch.Tensor,
                          edge_inputs: torch.Tensor,
                          curr_index: torch.Tensor,
                          pos_encoding,
+                         dist_inputs,
                          spatio_mask=None):
         '''
         Args:
@@ -347,6 +374,7 @@ class AttentionNet(nn.Module):
             edge_inputs: (batch, graph_size, k_size), k_size for KNN , 连接关系
             pos_encoding: (batch. graph_size, num_eigen_value ), 图的 laplace 矩阵的 eigen_value 
             curr_index: (batch, 1 , 1) curr_index in range(0,graph_size)
+            dist_inputs: (batch, graph_size, 1)
         '''
         batch_size, graph_size, knn_size = edge_inputs.shape
         current_edge = torch.gather(
@@ -362,11 +390,13 @@ class AttentionNet(nn.Module):
             pass
         # eigen_value 矩阵的 fature
         embedded_feature += self.spatio_pos_embedding(pos_encoding)
-        # self attention for embedded featute
-        embedded_feature = self.spatio_encoder(embedded_feature)
+        #### self attention for embedded featute
+        embedded_feature = self.spatio_encoder(
+            embedded_feature)  # shape (batch, graph_size, embedding_dim)
 
         ## dist_inputs todo, 此处未添加
-
+        embedded_feature = self.distfusion_layer(
+            torch.cat((embedded_feature, dist_inputs), dim=-1))
         # 提取 node feature
         curr_node_feature = torch.gather(embedded_feature,
                                          dim=1,
@@ -383,31 +413,38 @@ class AttentionNet(nn.Module):
         logp_list: torch.Tensor = self.pointer(embedded_spatio_feature,
                                                connected_nodes_feature, mask)
         logp_list = logp_list.squeeze(dim=1)  # 去除冗余维度 (1, k_size)
-        value = self.value_output(embedded_spatio_feature)  # 状态价值
+        value = None
 
         return logp_list, value
 
     def forward(self,
                 node_inputs,
+                dt_pool_inputs,
                 edge_inputs,
                 current_index: torch.Tensor,
                 pos_encoding,
+                dist_inputs,
                 mask=None):
         """
         Args:
-            node_inputs: (batch, graph_size, num_target * feature) , feature(mean,std)
+            node_inputs: (batch, history_size, graph_size,2 +  num_target * feature) , feature(mean,std)
+            dt_pool_inputs: (batch, history_size, 1)
             edge_inputs: (batch, graph_size, k_size), k_size for KNN , 连接关系
             pos_encoding: (batch, graph_size, num_eigen_value) , 图的 laplace 矩阵的 eigen_value 
             current_index: (batch, 1 , 1) curr_index in range(0,graph_size)
+            dist_inputs: (batch, graph_size, 1)
         """
         # 此处为 attention_net的 forward, PPO 部分在哪里？
         current_index = current_index.to(torch.int64)
         with autocast():
-            embedded_feature = self.graph_embedding(node_inputs, mask=mask)
+            embedded_feature = self.graph_embedding(node_inputs,
+                                                    dt_pool_inputs,
+                                                    mask=mask)
             logp_list, value = self.spatio_attention(embedded_feature,
                                                      edge_inputs,
                                                      current_index,
                                                      pos_encoding,
+                                                     dist_inputs,
                                                      spatio_mask=None)
         # 不返回 value, value_net 由 stable_baselines3 自动添加
         return logp_list
