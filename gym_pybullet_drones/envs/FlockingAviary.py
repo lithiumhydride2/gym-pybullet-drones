@@ -839,7 +839,7 @@ class FlockingAviary(BaseRLAviary):
             relative_distance = np.linalg.norm(relative_position[nth],
                                                axis=1)[other_mask]
             # 无人机间最小距离小于 1.0 m
-            if np.min(relative_distance) < 1.0:
+            if np.min(relative_distance) < IPPArg.TERMINATE_MIN_DIS:
                 if self.USER_DEBUG:
                     print("Terminated min distance")
                 return True
@@ -849,9 +849,9 @@ class FlockingAviary(BaseRLAviary):
                     print("Terminated fly too low")
                 return True
             # nth 无人机与其余无人机最小距离大于 x
-            if np.min(relative_distance) > 3.4:
+            if np.min(relative_distance) > IPPArg.TERMINATE_MAX_DIS:
                 if self.USER_DEBUG:
-                    print("Terminated too close")
+                    print("Terminated distance too large")
                 return True
             if self.curr_time > IPPArg.MAX_EPISODE_LEN:
                 if self.USER_DEBUG:

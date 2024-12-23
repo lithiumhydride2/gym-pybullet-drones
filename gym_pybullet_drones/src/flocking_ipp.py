@@ -34,6 +34,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.evaluation import evaluate_policy
 from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationType, FOVType
 from gymnasium.envs.registration import register
+from gym_pybullet_drones.envs.IPPArguments import IPPArg
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
 # DEFAULT_GUI = True  # 默认不启用 gui
@@ -108,7 +109,7 @@ def learn(drone=DEFAULT_DRONE,
 
     train_env = make_vec_env(FlockingAviaryIPP,
                              env_kwargs=env_kwargs,
-                             n_envs=1,
+                             n_envs=IPPArg.N_ENVS,
                              seed=0)
 
     # 这里 train_env 和 eval_env 的 pyplot 可能会发生冲突

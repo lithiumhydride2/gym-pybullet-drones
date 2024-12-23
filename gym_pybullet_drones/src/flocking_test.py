@@ -2,16 +2,15 @@ import numpy as np
 import torch
 from stable_baselines3.ppo import PPO
 from stable_baselines3.common.env_checker import check_env
-from flocking import *
+from flocking_ipp import *
 
 # override
 DEFAULT_GUI = True
 DEFAULT_USER_DEBUG_GUI = True
-DEFAULT_ACT_TYPE = ActionType.YAW
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.08.2024_22.35.07"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.22.2024_22.21.56"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
@@ -56,11 +55,10 @@ def main():
         elif time < 15:
             return np.array([-1, 0])
 
-    TEST_DURATION = 40
+    TEST_DURATION = 100
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
 
-        # action, _states = model.predict(obs, deterministic=True)
-        action = yaw_test(test_env.curr_time)
+        action, _states = model.predict(obs, deterministic=False)
         print("Action is : {}".format(action))
         obs, reward, terminated, truncated, info = test_env.step(action)
 
@@ -73,7 +71,7 @@ def main():
                             np.zeros(9)]))
         test_env.render()
         if terminated:
-            obs = test_env.reset(seed=42, options={})
+            obs, info = test_env.reset(seed=42, options={})
         if test_env.GUI:
             sync(i, start, 1 / test_env.DECISION_FREQ_HZ)
 
