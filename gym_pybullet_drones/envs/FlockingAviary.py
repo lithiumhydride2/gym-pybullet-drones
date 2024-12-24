@@ -232,6 +232,9 @@ class FlockingAviary(BaseRLAviary):
                     f"gp_std_{index}")
                 self.plot_online_stuff[f"gp_pred_{index}"] = init_animation(
                     f"gp_pred_{index}")
+                self.plot_online_stuff[
+                    f"gp_ground_truth_{index}"] = init_animation(
+                        f"gp_ground_truth_{index}")
 
     def _actionSpace(self):
         """Returns the action space of the environment.
@@ -753,15 +756,20 @@ class FlockingAviary(BaseRLAviary):
         """
         if self.USER_DEBUG:
             for index in self.control_by_RL_ID:
+                ## 绘制 Heatmap
                 std_array = self.decisions[index].cache["all_std"].reshape(
                     (40, 40))
                 pred_array = self.decisions[index].cache["all_pred"].reshape(
                     (40, 40))
+                ground_truth_array = np.max(
+                    self.decisions[index].GP_ground_truth.fn(), axis=1)
 
                 self.plot_online_stuff[f"gp_std_{index}"][2].set_array(
                     std_array)
                 self.plot_online_stuff[f"gp_pred_{index}"][2].set_array(
                     pred_array)
+                self.plot_online_stuff[f"gp_ground_truth_{index}"][
+                    2].set_array(ground_truth_array)
 
                 # 绘制 fov
                 fov_vector = self._computeFovVector(index)
@@ -848,8 +856,8 @@ class FlockingAviary(BaseRLAviary):
                 if self.USER_DEBUG:
                     print("Terminated fly too low")
                 return True
-            # nth 无人机与其余无人机最小距离大于 x
-            if np.min(relative_distance) > IPPArg.TERMINATE_MAX_DIS:
+            # nth 无人机与其余无人机最大距离大于 x
+            if np.max(relative_distance) > IPPArg.TERMINATE_MAX_DIS:
                 if self.USER_DEBUG:
                     print("Terminated distance too large")
                 return True
