@@ -184,10 +184,11 @@ class FlockingAviaryIPP(FlockingAviary):
     def _computeReward(self):
         reward = super()._computeReward()
         for nth in self.control_by_RL_ID:
-            smooth_reward = abs(self.IPPEnvs[nth].route_coord[-1] -
-                                self.IPPEnvs[nth].route_coord[-2]) * 0.3
+            smooth_reward = circle_angle_diff(
+                self.IPPEnvs[nth].route_coord[-1],
+                self.IPPEnvs[nth].route_coord[-2]) * 0.4
             reward -= smooth_reward
-        return reward
+        return float(reward)
 
     def _preprocessAction(self, action):
         """

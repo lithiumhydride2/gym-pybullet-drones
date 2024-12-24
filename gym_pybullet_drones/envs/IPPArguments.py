@@ -6,10 +6,15 @@ class IPPArguments:
     def __init__(self):
         if __debug__:
             self.N_ENVS = 1
+            self.DEFAULT_GUI = True
+            self.DEFAULT_USER_DEBUG_GUI = True
         else:
-            self.N_ENVS = 32
+            self.N_ENVS = 16
+            self.DEFAULT_GUI = False
+            self.DEFAULT_USER_DEBUG_GUI = False
         self.CONTROL_BY_RL_MASK = None  # "random" 为随机生成,其余为固定
-        self.NUM_DRONE = 3
+        self.RANDOM_POINT = False  # 是否随机生成目标点
+        self.NUM_DRONE = 4
         #### graph
         self.k_size = 10  # knn
         self.sample_num = 36
@@ -17,7 +22,7 @@ class IPPArguments:
         #### terminated
         self.MAX_EPISODE_LEN = 180  # max length of an episode / s
         self.TERMINATE_MIN_DIS = 1.0
-        self.TERMINATE_MAX_DIS = 6.0
+        self.TERMINATE_MAX_DIS = 5.0
 
         # 选取前 32 大的特征值，这里抛去第一大特征值，因此最大为 sample_num - 1
         self.num_eigen_value = min(32, self.sample_num - 1)
@@ -34,6 +39,7 @@ class IPPArguments:
         self.dt_normlization = 1.993 * 3  # UNC WITH 1% uncertainty , 时间维度的归一化参数
         self.DECISION_FREQ = 2
         self.FLOCKIN_FREQ = 5
+        self.EXIST_THRESHOLD = np.exp(-0.5)  # 约 0.6
 
 
 IPPArg = IPPArguments()

@@ -38,11 +38,8 @@ from gymnasium.envs.registration import register
 from gym_pybullet_drones.envs.IPPArguments import IPPArg
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
-# DEFAULT_GUI = True  # 默认不启用 gui
-# DEFAULT_USER_DEBUG_GUI = True  # user debug gui, 包含 gp_heatmap
-## change gui
-DEFAULT_GUI = False
-DEFAULT_USER_DEBUG_GUI = False
+DEFAULT_GUI = IPPArg.DEFAULT_GUI
+DEFAULT_USER_DEBUG_GUI = IPPArg.DEFAULT_USER_DEBUG_GUI
 
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
@@ -62,6 +59,7 @@ DEFAULT_FOV_CONFIG = FOVType.SINGLE
 
 DEFAULT_FLOCKING_FREQ = 10
 DEFAULT_DECISION_FREQ = 5
+DEFAULT_RANDOM_POINT = IPPArg.RANDOM_POINT
 
 
 def learn(drone=DEFAULT_DRONE,
@@ -82,7 +80,8 @@ def learn(drone=DEFAULT_DRONE,
           fov_config=DEFAULT_FOV_CONFIG,
           obs=DEFAULT_OBS_TYPE,
           act=DEFAULT_ACT_TYPE,
-          control_by_RL_mask=DEFAULT_CONTROL_BY_RL_MASK):
+          control_by_RL_mask=DEFAULT_CONTROL_BY_RL_MASK,
+          random_point=DEFAULT_RANDOM_POINT):
 
     filename = os.path.join(
         output_folder, 'save-' + datetime.now().strftime("%m.%d.%Y_%H.%M.%S"))
@@ -94,21 +93,23 @@ def learn(drone=DEFAULT_DRONE,
                           for x in range(num_drones)])  # 横一字排列
     INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
 
-    env_kwargs = dict(drone_model=drone,
-                      num_drones=num_drones,
-                      control_by_RL_mask=control_by_RL_mask,
-                      initial_xyzs=INIT_XYZS,
-                      initial_rpys=INIT_RPYS,
-                      pyb_freq=simulation_freq_hz,
-                      flocking_freq_hz=flocking_freq_hz,
-                      decision_freq_hz=decision_freq_hz,
-                      ctrl_freq=control_freq_hz,
-                      gui=gui,
-                      user_debug_gui=user_debug_gui,
-                      default_flight_height=default_flight_height,
-                      fov_config=fov_config,
-                      obs=obs,
-                      act=act)  # 定义 action space and observation space
+    env_kwargs = dict(
+        drone_model=drone,
+        num_drones=num_drones,
+        control_by_RL_mask=control_by_RL_mask,
+        initial_xyzs=INIT_XYZS,
+        initial_rpys=INIT_RPYS,
+        pyb_freq=simulation_freq_hz,
+        flocking_freq_hz=flocking_freq_hz,
+        decision_freq_hz=decision_freq_hz,
+        ctrl_freq=control_freq_hz,
+        gui=gui,
+        user_debug_gui=user_debug_gui,
+        default_flight_height=default_flight_height,
+        fov_config=fov_config,
+        obs=obs,
+        act=act,
+        random_point=random_point)  # 定义 action space and observation space
 
     train_env = make_vec_env(FlockingAviaryIPP,
                              env_kwargs=env_kwargs,

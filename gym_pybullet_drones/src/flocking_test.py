@@ -10,7 +10,7 @@ DEFAULT_USER_DEBUG_GUI = True
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.23.2024_21.59.31"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.24.2024_17.22.12"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
@@ -46,19 +46,10 @@ def main():
     obs, info = test_env.reset(seed=42)
     start = time.time()
 
-    # 这里使用四边形场地进行验证？
-    def yaw_test(time):
-        if time < 5:
-            return np.array([1, 0])
-        elif time < 10:
-            return np.array([0, 1])
-        elif time < 15:
-            return np.array([-1, 0])
-
     TEST_DURATION = 100
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
 
-        action, _states = model.predict(obs, deterministic=False)
+        action, _states = model.predict(obs, deterministic=True)
         print("Action is : {}".format(action))
         obs, reward, terminated, truncated, info = test_env.step(action)
 

@@ -552,7 +552,8 @@ class FlockingAviary(BaseRLAviary):
         self.target_vs = np.zeros((self.NUM_DRONES, 4))
         self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
         self.target_yaw = np.zeros((self.NUM_DRONES, ))
-        self.reynolds = Reynolds(random_point=self.RANDOM_POINT)
+        self.reynolds = Reynolds(random_point=self.RANDOM_POINT,
+                                 waypoint_name="random_50")
 
         ### cache
         self.cache = {}
@@ -811,16 +812,18 @@ class FlockingAviary(BaseRLAviary):
                 self.cache['unc'][nth] = unc_list
 
                 ## Unc reward, 鼓励减少不确定性
-                unc_reward = 1 - unc_list
-                unc_reward = np.sum(
-                    unc_reward[unc_reward > .0]) / (self.NUM_DRONES - 1)
-                reward += unc_reward
+                # unc_reward = 1 - unc_list
+                # unc_reward = np.sum(
+                #     unc_reward[unc_reward > .0]) / (self.NUM_DRONES - 1)
+                # reward += unc_reward
 
                 ## Unc reward 都是累计 reward, 需要即使奖励
-                detection_map = self.cache["detection_map"]
-                detection_reward = len(detection_map) / (self.NUM_DRONES - 1)
-                reward += detection_reward
-
+                preds = self.decisions[nth].cache["preds"]
+                observed_target = 0
+                for pred in preds:
+                    if np.max(pred) > IPPArg.EXIST_THRESHOLD:
+                        observed_target += 1
+                reward += observed_target / (self.NUM_DRONES - 1)
                 ## 平滑性 reward
                 return reward
 
@@ -866,7 +869,7 @@ class FlockingAviary(BaseRLAviary):
                     print("Terminated fly too low")
                 return True
             # nth 无人机与其余无人机最大距离大于 x
-            if np.max(relative_distance) > IPPArg.TERMINATE_MAX_DIS:
+            if np.min(relative_distance) > IPPArg.TERMINATE_MAX_DIS:
                 if self.USER_DEBUG:
                     print("Terminated distance too large")
                 return True
