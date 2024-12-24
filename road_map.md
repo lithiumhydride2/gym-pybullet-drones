@@ -49,17 +49,21 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [x] 减少 action space, 提前 truncted RL
 
 ## STAMP 的新思路
-- [] 探讨了各种建模对于环境的影响，但无论如何，我们需要对 action space 进行图的离散化。
-  - [] 这里需要考虑的是如何评估 Node_feature，这里需要将 GP 建模在 action space 之中
-  - [] 先调通在图的离散化中基本的操作
+- [x] 探讨了各种建模对于环境的影响，但无论如何，我们需要对 action space 进行图的离散化。
+  - [x] 这里需要考虑的是如何评估 Node_feature，这里需要将 GP 建模在 action space 之中
+  - [x] 先调通在图的离散化中基本的操作
 - [x]使用 IPP 思路进行建模， action type 应当为 yaw 直接控制的形式
 
 ### 先考虑简化OBS与网络的设计，
 - [] budget 在 IPP 中用于判断下一个节点是否可达，我似乎并不需要这样一个 budget
   - [x] 这个 budget 可以用于现在在 knn 中的连接，因为我们需要限制过大的 yaw action
-- [] 那么现在输入为增广图， 已执行过的路径，这是一个简化
+- [x] 那么现在输入为增广图， 已执行过的路径，这是一个简化
 
-- [] 按照我的理解 ，我的 action_net 与 value_net 已经包含在 attention_net 之中
+- [x] 按照我的理解 ，我的 action_net 与 value_net 已经包含在 attention_net 之中
+- [x] 和每一个 node 连接的节点数量需要多一点，以能够再次发现目标
+- [x] 先减少训练时，无人机的数量，
+- [ ] 还是需要考虑 FOV 对不确定性的影响, 这里也是
+- [ ] 如何建模 reward function ？ 归一化 ？
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash

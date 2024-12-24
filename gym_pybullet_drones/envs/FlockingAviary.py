@@ -413,6 +413,7 @@ class FlockingAviary(BaseRLAviary):
                 scale=self.position_noise_std[noise_index],
                 size=pose.shape[0]) / np.sqrt(2)
             detection_map[index] = pose[:2]
+        self.cache["detection_map"] = detection_map
         return detection_map
 
     def _computeAdjacencyMatFOV(self):
@@ -800,7 +801,7 @@ class FlockingAviary(BaseRLAviary):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()
                 high_info_idx = self.decisions[
                     nth].GP_ground_truth.get_high_info_indx(ground_truth)
-                ## Unc update reward
+                ## Unc update reward, 最大值为1
                 _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
                     self.curr_time, high_info_idx, return_all=True)
                 unc_list = np.asarray(unc_list)
@@ -811,14 +812,22 @@ class FlockingAviary(BaseRLAviary):
 
                 ## Unc reward, 鼓励减少不确定性
                 unc_reward = 1 - unc_list
-                reward += np.sum(unc_reward[unc_reward > .0])
+                unc_reward = np.sum(
+                    unc_reward[unc_reward > .0]) / (self.NUM_DRONES - 1)
+                reward += unc_reward
+
+                ## Unc reward 都是累计 reward, 需要即使奖励
+                detection_map = self.cache["detection_map"]
+                detection_reward = len(detection_map) / (self.NUM_DRONES - 1)
+                reward += detection_reward
+
+                ## 平滑性 reward
                 return reward
 
             reward = np.zeros((self.NUM_DRONES, ))
             for nth in self.control_by_RL_ID:
                 reward[nth] = compute_reward(nth)
 
-            # 惩罚较大 action
             return np.sum(reward).astype(float)
 
     ################################################################################

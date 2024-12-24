@@ -181,6 +181,14 @@ class FlockingAviaryIPP(FlockingAviary):
         self.plot_online()
         return obs[self.control_by_RL_ID[0]]
 
+    def _computeReward(self):
+        reward = super()._computeReward()
+        for nth in self.control_by_RL_ID:
+            smooth_reward = abs(self.IPPEnvs[nth].route_coord[-1] -
+                                self.IPPEnvs[nth].route_coord[-2]) * 0.3
+            reward -= smooth_reward
+        return reward
+
     def _preprocessAction(self, action):
         """
         使用 PID 控制将 action 转化为 RPM, yaw_action 后续也应该从此处产生 
@@ -250,7 +258,7 @@ class IPPenv:
 
         self.curr_node_index = 0  # 当前 node index
         self.yaw_start = yaw_start
-        self.route_coord = [self.yaw_start]
+        self.route_coord = [self.yaw_start, self.yaw_start]
 
     @property
     def Obs(self):
@@ -320,7 +328,7 @@ class IPPenv:
 
         self.curr_node_index = 0
         self.yaw_start = yaw_start
-        self.route_coord = [yaw_start]
+        self.route_coord = [yaw_start, yaw_start]
 
         self.node_coords, self.graph = self.graph_control.gen_graph(
             curr_coord=yaw_start,

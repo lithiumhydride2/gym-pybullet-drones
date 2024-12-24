@@ -4,8 +4,12 @@ import numpy as np
 class IPPArguments:
 
     def __init__(self):
-
-        self.N_ENVS = 1
+        if __debug__:
+            self.N_ENVS = 1
+        else:
+            self.N_ENVS = 32
+        self.CONTROL_BY_RL_MASK = None  # "random" 为随机生成,其余为固定
+        self.NUM_DRONE = 3
         #### graph
         self.k_size = 10  # knn
         self.sample_num = 36

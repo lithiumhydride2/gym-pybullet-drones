@@ -117,6 +117,8 @@ class GaussianProcessTorch():
         if t is None or t != self.curr_t:
             raise ValueError
         if idx is not None:
+            if (len(idx) == 0):
+                return 0.0
             X = self.cache["std_at_grid"][idx]
             return np.mean(X)
         else:

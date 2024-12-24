@@ -32,16 +32,17 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.vec_env import SubprocVecEnv
 from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationType, FOVType
 from gymnasium.envs.registration import register
 from gym_pybullet_drones.envs.IPPArguments import IPPArg
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
-DEFAULT_GUI = True  # 默认不启用 gui
-DEFAULT_USER_DEBUG_GUI = True  # user debug gui, 包含 gp_heatmap
+# DEFAULT_GUI = True  # 默认不启用 gui
+# DEFAULT_USER_DEBUG_GUI = True  # user debug gui, 包含 gp_heatmap
 ## change gui
-# DEFAULT_GUI = False
-# DEFAULT_USER_DEBUG_GUI = False
+DEFAULT_GUI = False
+DEFAULT_USER_DEBUG_GUI = False
 
 DEFAULT_RECORD_VIDEO = False
 DEFAULT_PLOT = True
@@ -50,9 +51,10 @@ DEFAULT_SIMULATION_FREQ_HZ = 120
 DEFAULT_CONTROL_FREQ_HZ = 60
 DEFAULT_DURATION_SEC = 30
 DEFAULT_OUTPUT_FOLDER = 'results'
+DEFAULT_CONTROL_BY_RL_MASK = IPPArg.CONTROL_BY_RL_MASK
 DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
-DEFAULT_NUM_DRONE = 5
+DEFAULT_NUM_DRONE = IPPArg.NUM_DRONE
 
 DEFAULT_OBS_TYPE = ObservationType.IPP
 DEFAULT_ACT_TYPE = ActionType.IPP_YAW
@@ -79,7 +81,8 @@ def learn(drone=DEFAULT_DRONE,
           colab=DEFAULT_COLAB,
           fov_config=DEFAULT_FOV_CONFIG,
           obs=DEFAULT_OBS_TYPE,
-          act=DEFAULT_ACT_TYPE):
+          act=DEFAULT_ACT_TYPE,
+          control_by_RL_mask=DEFAULT_CONTROL_BY_RL_MASK):
 
     filename = os.path.join(
         output_folder, 'save-' + datetime.now().strftime("%m.%d.%Y_%H.%M.%S"))
@@ -93,7 +96,7 @@ def learn(drone=DEFAULT_DRONE,
 
     env_kwargs = dict(drone_model=drone,
                       num_drones=num_drones,
-                      control_by_RL_mask="random",
+                      control_by_RL_mask=control_by_RL_mask,
                       initial_xyzs=INIT_XYZS,
                       initial_rpys=INIT_RPYS,
                       pyb_freq=simulation_freq_hz,
@@ -110,12 +113,16 @@ def learn(drone=DEFAULT_DRONE,
     train_env = make_vec_env(FlockingAviaryIPP,
                              env_kwargs=env_kwargs,
                              n_envs=IPPArg.N_ENVS,
-                             seed=0)
+                             seed=42,
+                             vec_env_cls=SubprocVecEnv)
 
     # 这里 train_env 和 eval_env 的 pyplot 可能会发生冲突
     env_kwargs['user_debug_gui'] = False
     env_kwargs['gui'] = False
-    eval_env = Monitor(FlockingAviaryIPP(**env_kwargs))
+    eval_env = make_vec_env(FlockingAviaryIPP,
+                            env_kwargs=env_kwargs,
+                            n_envs=1,
+                            vec_env_cls=SubprocVecEnv)
     #### check the environment's spaces
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)
@@ -125,7 +132,9 @@ def learn(drone=DEFAULT_DRONE,
     model = PPO(policy=IPPActorCriticPolicy,
                 env=train_env,
                 verbose=1,
-                tensorboard_log=filename + '/tb/')
+                tensorboard_log=filename + '/tb/',
+                batch_size=128,
+                n_steps=256)  # n_steps 为交互 step 后， 更新 policy
 
     callback_on_best = StopTrainingOnNoModelImprovement(
         max_no_improvement_evals=int(1e2), min_evals=int(1e3), verbose=1)
