@@ -75,7 +75,6 @@ class GraphController:
                 circle_to_yaw(curr_coord.reshape(-1, 2)))
 
         self.findNearestNeighbour(k=self.k_size)
-        self.calcAllPathCost()
 
         return self.node_coords, self.graph.edges
 
@@ -100,55 +99,9 @@ class GraphController:
                 self.graph.add_node(a)
                 self.graph.add_edge(a, b, distances[i, j])
 
-    def calcAllPathCost(self):
-        '''
-        使用 dijkstra 计算节点之间的遍历距离
-        '''
-        for action in self.node_coords:
-            startNode = str(self.findNodeIndex(action))
-            dist, prev = dijkstra(self.graph, startNode)
-            self.dijkstra_dist.append(dist)
-            self.dijkstra_prev.append(prev)
-
-    def calcDistance(self, current, destination):
-        '''
-        计算从 current 到 destination 距离 
-        '''
-        startNode = str(self.findNodeIndex(current))
-        endNode = str(self.findNodeIndex(destination))
-        if startNode == endNode:
-            return 0
-        # pathToEnd = to_array(self.dijkstra_prev[int(startNode)], endNode)
-        # # wtf ? 我要保持稳定，可能需要这一点
-        # if len(pathToEnd) <= 1:  # not expand this node
-        #     return 1000
-
-        distance = self.dijkstra_dist[int(startNode)][endNode]
-        distance = 0 if distance is None else distance
-        return distance
-
-    def shortestPath(self, current, destination):
-        self.startNode = str(self.findActionIndex(current))
-        self.endNode = str(self.findActionIndex(destination))
-        if self.startNode == self.endNode:
-            return 0
-        dist, prev = dijkstra(self.graph, self.startNode)
-
-        pathToEnd = to_array(prev, self.endNode)
-
-        if len(pathToEnd) <= 1:  # not expand this node
-            return 1000
-
-        distance = dist[self.endNode]
-        distance = 0 if distance is None else distance
-        return distance
-
     def findNodeIndex(self, p):
         return np.where(np.linalg.norm(self.node_coords -
                                        p, axis=1) < 1e-5)[0][0]
-
-    def findPointsFromNode(self, n):
-        return self.action_coords[int(n)]
 
     def plotPoints(self, points):
         x = [item[0] for item in points]

@@ -270,8 +270,7 @@ class IPPenv:
         graph_pos_encoding = self.graph_pos_encoding(edge_inputs)
         ### curr_index
         curr_index = np.asarray(self.curr_node_index).reshape(-1, 1)
-        dist_inputs = self.calc_distance_of_nodes(
-            curr_index) / np.pi  # 使用 np.pi 归一化
+        dist_inputs = self.calc_distance_of_nodes(curr_index)
         return {
             "edge_inputs": edge_inputs,
             "curr_index": curr_index,
@@ -280,12 +279,16 @@ class IPPenv:
         }
 
     def calc_distance_of_nodes(self, current_index):
-        all_dist = []
-        current_coord = self.node_coords[current_index.item()]
-        for i in range(IPPArg.sample_num):
-            all_dist.append(
-                circle_angle_diff(current_coord, self.node_coords[i]))
-        return np.asarray(all_dist).reshape(-1, 1)
+        '''
+        仅计算当前节点与相连节点的距离
+        
+        使用 np.pi 进行归一化， 不相连节点距离设置为1
+        '''
+        all_dist = np.ones((IPPArg.sample_num, 1)) * np.pi
+        for i in map(int, self.graph[f"{current_index.item()}"].keys()):
+            all_dist[i] = self.graph[f"{current_index.item()}"][f"{i}"].length
+
+        return np.asarray(all_dist).reshape(-1, 1) / np.pi
 
     def graph_pos_encoding(self, edge_inputs):
         '''

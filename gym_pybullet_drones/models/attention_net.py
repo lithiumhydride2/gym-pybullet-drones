@@ -375,6 +375,7 @@ class AttentionNet(nn.Module):
             pos_encoding: (batch. graph_size, num_eigen_value ), 图的 laplace 矩阵的 eigen_value 
             curr_index: (batch, 1 , 1) curr_index in range(0,graph_size)
             dist_inputs: (batch, graph_size, 1)
+            spatio_mask: 限制当前节点只能访问想连接的节点
         '''
         batch_size, graph_size, knn_size = edge_inputs.shape
         current_edge = torch.gather(
@@ -387,7 +388,7 @@ class AttentionNet(nn.Module):
         if spatio_mask is None:
             mask = torch.zeros((batch_size, 1, knn_size), dtype=torch.bool)
         else:
-            pass
+            raise NotImplementedError
         # eigen_value 矩阵的 fature
         embedded_feature += self.spatio_pos_embedding(pos_encoding)
         #### self attention for embedded featute
