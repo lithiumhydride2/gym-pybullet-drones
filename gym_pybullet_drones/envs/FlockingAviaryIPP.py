@@ -109,7 +109,9 @@ class FlockingAviaryIPP(FlockingAviary):
         self.decisions = {}
         self.IPPEnvs = {}
         for nth in self.control_by_RL_ID:
-            self.IPPEnvs[nth] = IPPenv(yaw_start=self._computeHeading(nth)[:2],
+            # 这里的 yaw_start 由于物理引擎后更新，使用 INIT_RYPS 初始化
+            self.IPPEnvs[nth] = IPPenv(yaw_start=yaw_to_circle(
+                self.INIT_RPYS[nth][-1])[:2],
                                        act_type=self.ACT_TYPE)
             # 使用 IPPEnvs 的采样初始化 self.decision
             self.decisions[nth] = decision(
@@ -346,15 +348,13 @@ class IPPenv:
         
         如何处理运行到一半的 action 呢？
         '''
-
-        self.curr_node_index = self.graph_control.findNodeIndex(yaw_start)
-        self.yaw_start = yaw_start
-        self.route_coord = [yaw_start, yaw_start]
-
         self.node_coords, self.graph = self.graph_control.gen_graph(
             curr_coord=yaw_start,
             samp_num=IPPArg.sample_num,
             gen_range=IPPArg.gen_range)
+        self.curr_node_index = self.graph_control.findNodeIndex(yaw_start)
+        self.yaw_start = yaw_start
+        self.route_coord = [yaw_start, yaw_start]
 
     def step(self, action):
         '''
