@@ -49,6 +49,10 @@ class GaussianProcessGroundTruth:
                     np.linspace(-1, 1, self.grid_size),
                 )))  # in shape (self.grid_size **2 , 2)
 
+    def reset(self, init_other_pose):
+        self.mean = (np.array(init_other_pose).reshape(-1, 2) /
+                     self._pose_max_val)
+
     def step(self, other_pose: np.ndarray):
         """
         由无人机真实相对位置，更新 mean of gaussian_process
@@ -288,6 +292,7 @@ class GaussianProcessWrapper:
         self.num_uav = num_uav
         self.id = id
         self.other_list = other_list
+        self.use_gptorch = use_gpytorch
         if use_gpytorch:
             self.GPs: list[GaussianProcessTorch] = [
                 GaussianProcessTorch(id=self.id, other_id=other)
@@ -306,7 +311,15 @@ class GaussianProcessWrapper:
         self.kHighInfoIdxThreshold = math.exp(-0.5)
         self.kAddNegitiveGP = True
 
-    def GPbyOtherID(self, id):
+    def reset(self, id, other_list):
+        self.id = id
+        self.other_list = other_list
+        self.curr_t = None
+
+        for gp, other_id in zip(self.GPs, self.other_list):
+            gp.reset(id=self.id, other_id=other_id)
+
+    def GPbyOtherID(self, id) -> GaussianProcessTorch:
         for gp in self.GPs:
             if id == gp.other_id:
                 return gp

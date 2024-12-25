@@ -31,6 +31,14 @@ class GaussianProcessTorch():
                     np.linspace(-1, 1, self.grid_size),
                 )))
 
+    def reset(self, id, other_id):
+        self.id = id
+        self.other_id = other_id
+        self.observed_points: deque[np.ndarray] = deque()
+        self.observed_value: deque[np.ndarray] = deque()
+        self.curr_t = -1.0
+        self.cache: dict[str, np.ndarray] = {}
+
     def add_observed_point(self, point: np.ndarray, value: np.ndarray):
         '''
         Add new data, and deltet old data
@@ -75,7 +83,6 @@ class GaussianProcessTorch():
         predict_grid = self.gp_torch.predict(gird_with_t)
         mean = predict_grid.mean.cpu().detach().numpy()
         std = predict_grid.stddev.cpu().detach().numpy()
-
         self.cache["y_pred_at_grid"] = mean
         self.cache["std_at_grid"] = std
         return self.cache["y_pred_at_grid"], self.cache["std_at_grid"]

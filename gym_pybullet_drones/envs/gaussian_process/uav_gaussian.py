@@ -41,7 +41,6 @@ class UAVGaussian():
         self.other_list = list(set(range(num_drone)) - set([nth_drone]))
 
         self.num_latent_target = len(self.other_list)  # 潜在目标数量
-        self.last_detection_target_map = None
 
         ########### gaussian_process_part ############
         self.GP_ground_truth = GaussianProcessGroundTruth(
@@ -72,6 +71,24 @@ class UAVGaussian():
                                           stride=IPPArg.history_stride,
                                           ceil_mode=True)
         self.last_time = 0.0
+
+    def reset(self, nth_drone):
+        '''
+        node_coords 无需改变
+        '''
+        self.id = nth_drone
+        self.other_list = list(set(range(self.num_drone)) - set([nth_drone]))
+        self.num_latent_target = len(self.other_list)  # 潜在目标数量
+
+        self.cache = {}
+        self.last_time = 0.0
+        self.ego_heading = 0.0  # 自身朝向状态量
+        self.last_ego_heading = 0.0  # 上一个朝向状态量
+        self.last_yaw_action = 0.0  # 上一个朝向输出
+
+        self.GP_ground_truth.reset(
+            init_other_pose=np.zeros((2 * self.num_latent_target, )))
+        self.GP_detection.reset(id=nth_drone, other_list=self.other_list)
 
     def _get_FOV_masks_of_node(self):
         # node_coords 在世界坐标系下,对于每个 node 生成一个 FOV_mask

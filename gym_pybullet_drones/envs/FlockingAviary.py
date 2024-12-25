@@ -565,49 +565,6 @@ class FlockingAviary(BaseRLAviary):
 
         return super().reset(seed, options)
 
-    # def step(self, action):
-    #     '''
-    #     This step in frequency of self.DECISION_FREQ_HZ
-    #             Parameters
-    #     ----------
-    #     action : ndarray | dict[..]
-    #         The input action for one or more drones, translated into RPMs by
-    #         the specific implementation of `_preprocessAction()` in each subclass.
-
-    #     Returns
-    #     -------
-    #     ndarray | dict[..]
-    #         The step's observation, check the specific implementation of `_computeObs()`
-    #         in each subclass for its format.
-    #     float | dict[..]
-    #         The step's reward value(s), check the specific implementation of `_computeReward()`
-    #         in each subclass for its format.
-    #     bool | dict[..]
-    #         Whether the current episode is over, check the specific implementation of `_computeTerminated()`
-    #         in each subclass for its format.
-    #     bool | dict[..]
-    #         Whether the current episode is truncated, check the specific implementation of `_computeTruncated()`
-    #         in each subclass for its format.
-    #     bool | dict[..]
-    #         Whether the current episode is trunacted, always false.
-    #     dict[..]
-    #         Additional information as a dictionary, check the specific implementation of `_computeInfo()`
-    #         in each subclass for its format.
-    #     '''
-
-    #     def finish_current_action(action):
-    #         if self.ACT_TYPE != ActionType.IPP_YAW:
-    #             raise ValueError
-
-    #     for _ in range(self.DECISION_PER_CTRL - 1):
-    #         # subclass step is in frequency of CTRL
-    #         # repeat, flocking update in _preprocessAction
-    #         super().step(action, need_return=False)
-
-    #     # last times
-    #     return super().step(action, need_return=True)
-
-    ################################################################################
     @property
     def drone_states(self):
         if self.cache.get("last_state_step", -1) != self.step_counter:

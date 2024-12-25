@@ -45,6 +45,12 @@ class FlockingAviaryIPP(FlockingAviary):
         for nth in self.control_by_RL_ID:
             self.IPPEnvs[nth] = IPPenv(yaw_start=self._computeHeading(nth)[:2],
                                        act_type=act)
+            self.decisions[nth] = decision(
+                fov_range=self.fov_range,
+                nth_drone=nth,
+                num_drone=self.NUM_DRONES,
+                planner=None,
+                node_coords=self.IPPEnvs[nth].node_coords)
 
     def plot_online(self):
         super().plot_online()
@@ -105,20 +111,12 @@ class FlockingAviaryIPP(FlockingAviary):
                 list(range(0, self.NUM_DRONES)),
                 dtype=np.int8)[self.control_by_RL_mask]
 
-        # 重新初始化 control_by_RL_ID
-        self.decisions = {}
-        self.IPPEnvs = {}
         for nth in self.control_by_RL_ID:
             # 这里的 yaw_start 由于物理引擎后更新，使用 INIT_RYPS 初始化
-            self.IPPEnvs[nth] = IPPenv(yaw_start=yaw_to_circle(
-                self.INIT_RPYS[nth][-1])[:2],
-                                       act_type=self.ACT_TYPE)
+            self.IPPEnvs[nth].reset(
+                yaw_start=yaw_to_circle(self.INIT_RPYS[nth][-1])[:2])
             # 使用 IPPEnvs 的采样初始化 self.decision
-            self.decisions[nth] = decision(
-                fov_range=self.fov_range,
-                nth_drone=nth,
-                num_drone=self.NUM_DRONES,
-                node_coords=self.IPPEnvs[nth].node_coords)
+            self.decisions[nth].reset(nth_drone=nth)
         return super().reset(seed, options)
 
     def _actionSpace(self):
@@ -344,14 +342,8 @@ class IPPenv:
 
     def reset(self, yaw_start):
         '''
-        重新进行采样
-        
         如何处理运行到一半的 action 呢？
         '''
-        self.node_coords, self.graph = self.graph_control.gen_graph(
-            curr_coord=yaw_start,
-            samp_num=IPPArg.sample_num,
-            gen_range=IPPArg.gen_range)
         self.curr_node_index = self.graph_control.findNodeIndex(yaw_start)
         self.yaw_start = yaw_start
         self.route_coord = [yaw_start, yaw_start]
