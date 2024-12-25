@@ -553,7 +553,7 @@ class FlockingAviary(BaseRLAviary):
         self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
         self.target_yaw = np.zeros((self.NUM_DRONES, ))
         self.reynolds = Reynolds(random_point=self.RANDOM_POINT,
-                                 waypoint_name="random_50")
+                                 waypoint_name="circle_7")
 
         ### cache
         self.cache = {}
@@ -565,42 +565,47 @@ class FlockingAviary(BaseRLAviary):
 
         return super().reset(seed, options)
 
-    def step(self, action):
-        '''
-        This step in frequency of self.DECISION_FREQ_HZ
-                Parameters
-        ----------
-        action : ndarray | dict[..]
-            The input action for one or more drones, translated into RPMs by
-            the specific implementation of `_preprocessAction()` in each subclass.
+    # def step(self, action):
+    #     '''
+    #     This step in frequency of self.DECISION_FREQ_HZ
+    #             Parameters
+    #     ----------
+    #     action : ndarray | dict[..]
+    #         The input action for one or more drones, translated into RPMs by
+    #         the specific implementation of `_preprocessAction()` in each subclass.
 
-        Returns
-        -------
-        ndarray | dict[..]
-            The step's observation, check the specific implementation of `_computeObs()`
-            in each subclass for its format.
-        float | dict[..]
-            The step's reward value(s), check the specific implementation of `_computeReward()`
-            in each subclass for its format.
-        bool | dict[..]
-            Whether the current episode is over, check the specific implementation of `_computeTerminated()`
-            in each subclass for its format.
-        bool | dict[..]
-            Whether the current episode is truncated, check the specific implementation of `_computeTruncated()`
-            in each subclass for its format.
-        bool | dict[..]
-            Whether the current episode is trunacted, always false.
-        dict[..]
-            Additional information as a dictionary, check the specific implementation of `_computeInfo()`
-            in each subclass for its format.
-        '''
+    #     Returns
+    #     -------
+    #     ndarray | dict[..]
+    #         The step's observation, check the specific implementation of `_computeObs()`
+    #         in each subclass for its format.
+    #     float | dict[..]
+    #         The step's reward value(s), check the specific implementation of `_computeReward()`
+    #         in each subclass for its format.
+    #     bool | dict[..]
+    #         Whether the current episode is over, check the specific implementation of `_computeTerminated()`
+    #         in each subclass for its format.
+    #     bool | dict[..]
+    #         Whether the current episode is truncated, check the specific implementation of `_computeTruncated()`
+    #         in each subclass for its format.
+    #     bool | dict[..]
+    #         Whether the current episode is trunacted, always false.
+    #     dict[..]
+    #         Additional information as a dictionary, check the specific implementation of `_computeInfo()`
+    #         in each subclass for its format.
+    #     '''
 
-        for _ in range(self.DECISION_PER_CTRL - 1):
-            # subclass step is in frequency of CTRL
-            # repeat, flocking update in _preprocessAction
-            super().step(action, need_return=False)
-        # last times
-        return super().step(action, need_return=True)
+    #     def finish_current_action(action):
+    #         if self.ACT_TYPE != ActionType.IPP_YAW:
+    #             raise ValueError
+
+    #     for _ in range(self.DECISION_PER_CTRL - 1):
+    #         # subclass step is in frequency of CTRL
+    #         # repeat, flocking update in _preprocessAction
+    #         super().step(action, need_return=False)
+
+    #     # last times
+    #     return super().step(action, need_return=True)
 
     ################################################################################
     @property
@@ -876,6 +881,11 @@ class FlockingAviary(BaseRLAviary):
             if self.curr_time > IPPArg.MAX_EPISODE_LEN:
                 if self.USER_DEBUG:
                     print("Terminated max episode length")
+                return True
+            if np.max(self.decisions[nth].cache["all_pred"]
+                      ) < IPPArg.LOSE_BELIEF_THERSHOLD:
+                if self.USER_DEBUG:
+                    print("Terminated lose all target")
                 return True
             return False
 

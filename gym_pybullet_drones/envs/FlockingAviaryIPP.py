@@ -69,8 +69,26 @@ class FlockingAviaryIPP(FlockingAviary):
         subprocess_action = edge_inputs[curr_index.item(), action.item()]
 
         self.IPPEnvs[self.control_by_RL_ID[0]].step(subprocess_action)
+
         # step 中重新计算 obs 与 action
-        return super().step(subprocess_action)
+
+        def finish_current_action(action):
+            if circle_angle_diff(
+                    self.IPPEnvs[self.control_by_RL_ID[0]].node_coords[action],
+                    self._computeHeading(
+                        self.control_by_RL_ID[0])[:2]) < np.deg2rad(5):
+                return True
+            return False
+
+        for _ in range(self.DECISION_PER_CTRL - 1):
+            # subclass step is in frequency of CTRL
+            # repeat, flocking update in _preprocessAction
+            super().step(subprocess_action, need_return=False)
+
+        while not finish_current_action(subprocess_action):
+            super().step(subprocess_action, need_return=False)
+        # last times
+        return super().step(subprocess_action, need_return=True)
 
     def reset(self, seed=None, options=None):
         '''
@@ -152,7 +170,8 @@ class FlockingAviaryIPP(FlockingAviary):
         Return the current observation of the environment.
         '''
         # 获得增广图形式的观测
-        assert self.step_counter % self.DECISION_PER_PYB == 0
+        ### 这里取消 step 与 decision 的严格对其
+        # assert self.step_counter % self.DECISION_PER_PYB == 0
         if self.OBS_TYPE == ObservationType.IPP:
             # 按照固定的时间频率，获得包含 node_feature 的观测
             obs = {}
@@ -186,7 +205,7 @@ class FlockingAviaryIPP(FlockingAviary):
         for nth in self.control_by_RL_ID:
             smooth_reward = circle_angle_diff(
                 self.IPPEnvs[nth].route_coord[-1],
-                self.IPPEnvs[nth].route_coord[-2]) * 0.4
+                self.IPPEnvs[nth].route_coord[-2]) * 0.1
             reward -= smooth_reward
         return float(reward)
 
@@ -257,7 +276,8 @@ class IPPenv:
             samp_num=IPPArg.sample_num,
             gen_range=IPPArg.gen_range)
 
-        self.curr_node_index = 0  # 当前 node index
+        self.curr_node_index = self.graph_control.findNodeIndex(
+            yaw_start)  # 当前 node index
         self.yaw_start = yaw_start
         self.route_coord = [self.yaw_start, self.yaw_start]
 
@@ -327,7 +347,7 @@ class IPPenv:
         如何处理运行到一半的 action 呢？
         '''
 
-        self.curr_node_index = 0
+        self.curr_node_index = self.graph_control.findNodeIndex(yaw_start)
         self.yaw_start = yaw_start
         self.route_coord = [yaw_start, yaw_start]
 

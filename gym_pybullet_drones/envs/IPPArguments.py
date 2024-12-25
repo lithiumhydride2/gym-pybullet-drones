@@ -40,6 +40,7 @@ class IPPArguments:
         self.DECISION_FREQ = 2
         self.FLOCKIN_FREQ = 5
         self.EXIST_THRESHOLD = np.exp(-0.5)  # 约 0.6
+        self.LOSE_BELIEF_THERSHOLD = 0.1  # 信念值低于 0.1 时认为丢失目标
 
 
 IPPArg = IPPArguments()
