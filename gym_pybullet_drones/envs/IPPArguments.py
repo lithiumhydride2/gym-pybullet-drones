@@ -11,10 +11,10 @@ class IPPArguments:
             self.DEFAULT_USER_DEBUG_GUI = True
             self.VEC_ENV_CLS = DummyVecEnv
         else:
-            self.N_ENVS = 16
+            self.N_ENVS = 32
             self.DEFAULT_GUI = False
             self.DEFAULT_USER_DEBUG_GUI = False
-            self.VEC_ENV_CLS = SubprocVecEnv
+            self.VEC_ENV_CLS = DummyVecEnv
 
         self.CONTROL_BY_RL_MASK = None  # "random" 为随机生成,其余为固定
         self.RANDOM_POINT = False  # 是否随机生成目标点，当前参数为 circle_7
