@@ -255,8 +255,8 @@ class UAVGaussian():
         history_pool_node_inputs: torch.Tensor = self.avgpool(
             self.node_inputs_history.permute(1, 2, 0)).permute(
                 2, 0, 1)  #(history_size, node_num, feature_dim)
-        history_pool_dt = self.avgpool(self.dt_history.permute(1, 0)).permute(
-            1, 0)
+        history_pool_dt: torch.Tensor = self.avgpool(
+            self.dt_history.permute(1, 0)).permute(1, 0)
         return history_pool_node_inputs.numpy(), history_pool_dt.numpy()
 
     def DecisionStep(self, obs):
