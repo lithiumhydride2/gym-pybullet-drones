@@ -10,7 +10,7 @@ DEFAULT_USER_DEBUG_GUI = True
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.24.2024_22.40.33"
+    filename = "/home/lih/results/save-12.25.2024_22.16.42"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
@@ -49,7 +49,7 @@ def main():
     TEST_DURATION = 100
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
 
-        action, _states = model.predict(obs, deterministic=False)
+        action, _states = model.predict(obs, deterministic=True)
         print("Action is : {}".format(action))
         obs, reward, terminated, truncated, info = test_env.step(action)
 

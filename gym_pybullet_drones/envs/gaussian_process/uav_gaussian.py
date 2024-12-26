@@ -109,9 +109,7 @@ class UAVGaussian():
                  detection_map: dict[int, np.ndarray] = None,
                  other_pose=None,
                  ego_heading=None,
-                 fov_vector=None,
-                 time=None,
-                 node_coords=None):
+                 time=None):
         """
         ### description : 进行 gp_ground_truth 和 gp_detection 的step
          ---------------
@@ -148,6 +146,23 @@ class UAVGaussian():
         self.cache["all_pred"] = all_pred
         return all_std, node_feature
 
+    def get_yaw_feature(self, gp_mean: np.ndarray):
+        '''
+        对于每个目标，提取其在所有 node_coords 内的 feature
+        '''
+        yaw_feature = np.zeros((self.node_coords.shape[0], 2))
+        grid_size = self.GP_detection.GPs[0].grid_size
+
+        for id, mask in enumerate(self.fov_masks):
+            if np.max(gp_mean[mask.astype(bool)]) > IPPArg.EXIST_THRESHOLD:
+                max_row, max_col = np.unravel_index(gp_mean.argmax(),
+                                                    (grid_size, grid_size))
+                yaw = np.asarray(
+                    [max_row - grid_size / 2, max_col - grid_size / 2])
+                yaw_feature[id] = yaw / np.linalg.norm(yaw)
+
+        return yaw_feature
+
     def update_node_feature(self):
         '''
         通过 FOV mask 的形式提取 node_feature
@@ -173,9 +188,10 @@ class UAVGaussian():
                 np.hstack((get_feature(pred, np.max).reshape(-1, 1),
                            get_feature(std, np.min).reshape(-1, 1),
                            get_feature(predict_pred, np.max).reshape(-1, 1),
-                           get_feature(predict_std, np.min).reshape(-1, 1)))
+                           get_feature(predict_std, np.min).reshape(-1, 1),
+                           self.get_yaw_feature(pred)))
             ]
-        node_feature = np.asarray(node_feature)  #(target,node,feature(2))
+        node_feature = np.asarray(node_feature)  #(target,node,feature(6))
         node_feature = node_feature.transpose(1, 0, 2).reshape(
             self.node_coords.shape[0], -1)  #(node,target * feature)
         return node_feature
@@ -194,13 +210,7 @@ class UAVGaussian():
         conditions = np.apply_along_axis(in_fov_along_axis, 1, grid)
         return conditions.astype(int)
 
-    def step(self,
-             curr_time,
-             detection_map,
-             ego_heading,
-             fov_vector,
-             relative_pose,
-             node_coords=None):
+    def step(self, curr_time, detection_map, ego_heading, relative_pose):
         """
         Args:
             curr_time: ros传入的当前时刻
@@ -220,9 +230,7 @@ class UAVGaussian():
         all_std, node_feature = self._gp_step(detection_map=detection_map,
                                               other_pose=relative_pose,
                                               ego_heading=ego_heading,
-                                              fov_vector=fov_vector,
-                                              time=curr_time,
-                                              node_coords=node_coords)
+                                              time=curr_time)
         # node_inputs 为 node_coords 与 node_feature 的结合
         node_inputs = np.concatenate((self.node_coords, node_feature), axis=1)
         history_pool_inputs, dt_pool_inputs = self.avg_pool_node_inputs(

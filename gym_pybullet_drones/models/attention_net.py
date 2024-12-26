@@ -283,11 +283,16 @@ class AttentionNet(nn.Module):
 
         self.node_coord_embedding = nn.Linear(IPPArg.NODE_COORD_DIM,
                                               embedding_dim)
+        self.yaw_feature_embedding = nn.Linear(IPPArg.NODE_COORD_DIM,
+                                               embedding_dim)
         self.belief_embedding = nn.Linear(IPPArg.BELIEF_FEATURE_DIM,
                                           embedding_dim)
         self.target_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
                                       n_head=IPPArg.N_HEAD,
                                       n_layer=IPPArg.N_LAYER)
+        self.yaw_feature_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
+                                           n_head=IPPArg.N_HEAD,
+                                           n_layer=IPPArg.N_LAYER)
         self.temporal_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
                                         n_head=IPPArg.N_HEAD,
                                         n_layer=IPPArg.N_LAYER)
@@ -310,7 +315,7 @@ class AttentionNet(nn.Module):
                         mask=None):
         """
         Args:
-            node_inputs: (batch, history_size, graph_size,2 +  num_target * feature) , feature(mean,std)
+            node_inputs: (batch, history_size, graph_size,2 +  num_target * feature) 
             dt_pool_inputs: (batch, history_size, 1)
         """
 
@@ -318,11 +323,11 @@ class AttentionNet(nn.Module):
         target_num = (input_dim - 2) // IPPArg.BELIEF_FEATURE_DIM
         # reshape node_inputs , 消除 graph_size 的 dim
         node_inputs = node_inputs.reshape(-1, 1, input_dim)
-        # node_coord_embedding 最后一个维度的前两部分为 node_coord
+        ### node_coord_embedding 最后一个维度的前两部分为 node_coord
         node_coord_embedding = self.node_coord_embedding(
             node_inputs[:, :, :2]
         )  #(graph_size * history_size , 1,embedding_dim)
-        # target belief embedding
+        ### target belief embedding
         target_belief_embedding = torch.cat(
             [
                 self.belief_embedding(
@@ -331,13 +336,18 @@ class AttentionNet(nn.Module):
                 for i in range(target_num)
             ],
             dim=1)  # (graph_size * history_size , target_num, embedding_dim)
-
+        ### yaw feature embedding feature
+        yaw_feature_embedding = self.yaw_feature_embedding(node_inputs[:, :,
+                                                                       -2:])
         # embedded_feature
         embedded_feature = torch.cat(
             (node_coord_embedding, target_belief_embedding), dim=1)
         embedded_feature: torch.Tensor = self.target_encoder(
             node_coord_embedding, embedded_feature
         )  #(batch_size * history_size * graph_size, 1, embedding_dim)
+        ## 添加 yaw_heading 的 attention
+        embedded_feature += self.yaw_feature_encoder(node_coord_embedding,
+                                                     yaw_feature_embedding)
         embedded_feature = embedded_feature.reshape(batch_size, history_size,
                                                     graph_size,
                                                     IPPArg.EMBEDDING_DIM)
@@ -355,7 +365,7 @@ class AttentionNet(nn.Module):
 
         ### 使用最新特征与其他历史特征做 cross-attention
         embedded_temporal_feature: torch.Tensor = self.temporal_encoder(
-            embedded_feature[:, -1:, :].contiguous(), embedded_feature)
+            embedded_feature[:, -1:, :], embedded_feature)
         embedded_temporal_feature = embedded_temporal_feature.reshape(
             batch_size, graph_size, IPPArg.EMBEDDING_DIM)
         return embedded_temporal_feature

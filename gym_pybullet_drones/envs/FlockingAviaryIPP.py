@@ -130,8 +130,8 @@ class FlockingAviaryIPP(FlockingAviary):
                     high=1.,
                     shape=(
                         IPPArg.history_size // IPPArg.history_stride,
-                        IPPArg.sample_num, 2 + (self.NUM_DRONES - 1) * 4
-                    ),  # node_coord and feature (target * (mean,std,pred_mean,pred_std))
+                        IPPArg.sample_num, 2 + (self.NUM_DRONES - 1) * 6
+                    ),  # node_coord and feature (target * (mean,std,pred_mean,pred_std, node_coord))
                     dtype=np.float32),
                 "dt_pool_inputs":
                 Box(low=-np.inf,
@@ -175,9 +175,7 @@ class FlockingAviaryIPP(FlockingAviary):
                         adjacency_Mat, nth),
                     ego_heading=circle_to_yaw(
                         self._computeHeading(nth)[:2].reshape(-1, 2)),
-                    fov_vector=self._computeFovVector(nth),
-                    relative_pose=relative_position[nth][other_pose_mask],
-                    node_coords=self.IPPEnvs[nth].node_coords)
+                    relative_pose=relative_position[nth][other_pose_mask])
                 # 合并两个 obs
                 obs[nth] = gaussian_obs | self.IPPEnvs[nth].Obs
         # cache for action subprocess

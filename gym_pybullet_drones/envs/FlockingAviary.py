@@ -773,18 +773,15 @@ class FlockingAviary(BaseRLAviary):
                 reward = np.sum(unc_update[unc_update > .0])
                 self.cache['unc'][nth] = unc_list
 
-                ## Unc reward, 鼓励减少不确定性
-                # unc_reward = 1 - unc_list
-                # unc_reward = np.sum(
-                #     unc_reward[unc_reward > .0]) / (self.NUM_DRONES - 1)
-                # reward += unc_reward
-
                 ## Unc reward 都是累计 reward, 需要即使奖励
                 preds = self.decisions[nth].cache["preds"]
                 observed_target = 0
+                ## TODO: 这里为了获取即时奖励，调整了 阈值
                 for pred in preds:
-                    if np.max(pred) > IPPArg.EXIST_THRESHOLD:
+                    if np.max(pred) > 0.9:
                         observed_target += 1
+                if observed_target == 0:
+                    observed_target = -1
                 reward += observed_target / (self.NUM_DRONES - 1)
                 ## 平滑性 reward
                 return reward

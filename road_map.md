@@ -55,15 +55,23 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [x]使用 IPP 思路进行建模， action type 应当为 yaw 直接控制的形式
 
 ### 先考虑简化OBS与网络的设计，
-- [] budget 在 IPP 中用于判断下一个节点是否可达，我似乎并不需要这样一个 budget
+- [x] budget 在 IPP 中用于判断下一个节点是否可达，我似乎并不需要这样一个 budget
   - [x] 这个 budget 可以用于现在在 knn 中的连接，因为我们需要限制过大的 yaw action
 - [x] 那么现在输入为增广图， 已执行过的路径，这是一个简化
 
 - [x] 按照我的理解 ，我的 action_net 与 value_net 已经包含在 attention_net 之中
 - [x] 和每一个 node 连接的节点数量需要多一点，以能够再次发现目标
 - [x] 先减少训练时，无人机的数量，
+
 - [ ] 还是需要考虑 FOV 对不确定性的影响, 这里也是
 - [ ] 如何建模 reward function ？ 归一化 ？
+
+### NODE feature:
+- [ ] 这里并没有借助 Gaussian 过程的预测功能，来 有意义地 评估 node feature
+- [ ] 减少问题的复杂度，减少图中节点的数量测试，减少历史的累加程度进行测试 
+- [ ] 在 stamp 中， history pool 评估的是智能体的历史移动，但我的 avgpool 可能起不到这个作用
+
+- [ ] 我可以做什么，使用 GP 估计 yaw 角度，是不是可以做出一些不同的特征 
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash
