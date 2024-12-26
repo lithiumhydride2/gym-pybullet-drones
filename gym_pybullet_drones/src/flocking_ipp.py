@@ -32,7 +32,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationType, FOVType
 from gymnasium.envs.registration import register
 from gym_pybullet_drones.envs.IPPArguments import IPPArg
@@ -60,6 +60,8 @@ DEFAULT_FOV_CONFIG = FOVType.SINGLE
 DEFAULT_FLOCKING_FREQ = IPPArg.FLOCKIN_FREQ
 DEFAULT_DECISION_FREQ = IPPArg.DECISION_FREQ
 DEFAULT_RANDOM_POINT = IPPArg.RANDOM_POINT
+
+vec_env_class = IPPArg.VEC_ENV_CLS
 
 
 def learn(drone=DEFAULT_DRONE,
@@ -115,7 +117,7 @@ def learn(drone=DEFAULT_DRONE,
                              env_kwargs=env_kwargs,
                              n_envs=IPPArg.N_ENVS,
                              seed=42,
-                             vec_env_cls=SubprocVecEnv)
+                             vec_env_cls=vec_env_class)
 
     # 这里 train_env 和 eval_env 的 pyplot 可能会发生冲突
     env_kwargs['user_debug_gui'] = False
@@ -123,7 +125,7 @@ def learn(drone=DEFAULT_DRONE,
     eval_env = make_vec_env(FlockingAviaryIPP,
                             env_kwargs=env_kwargs,
                             n_envs=1,
-                            vec_env_cls=SubprocVecEnv)
+                            vec_env_cls=vec_env_class)
     #### check the environment's spaces
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)
@@ -155,104 +157,6 @@ def learn(drone=DEFAULT_DRONE,
                 progress_bar=True)  # TODO: 改为 True
     model.save(filename + '/final_model.zip')
     print(filename)
-
-
-def run(drone=DEFAULT_DRONE,
-        gui=DEFAULT_GUI,
-        num_drones=DEFAULT_NUM_DRONE,
-        record_video=DEFAULT_RECORD_VIDEO,
-        plot=DEFAULT_PLOT,
-        user_debug_gui=DEFAULT_USER_DEBUG_GUI,
-        obstacles=DEFAULT_OBSTACLES,
-        simulation_freq_hz=DEFAULT_SIMULATION_FREQ_HZ,
-        control_freq_hz=DEFAULT_CONTROL_FREQ_HZ,
-        flocking_freq_hz=DEFAULT_FLOCKING_FREQ,
-        decision_freq_hz=DEFAULT_DECISION_FREQ,
-        duration_sec=DEFAULT_DURATION_SEC,
-        output_folder=DEFAULT_OUTPUT_FOLDER,
-        default_flight_height=DEFAULT_FLIGHT_HEIGHT,
-        colab=DEFAULT_COLAB):
-    #### Initialize the simulation #############################
-    INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
-                          for x in range(num_drones)])  # 横一字排列
-    INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
-    PHY = Physics.PYB
-
-    #### Create the environment ################################
-    control_by_RL_mask = np.zeros((num_drones, ))
-    control_by_RL_mask[0] = 1
-
-    env = FlockingAviary(drone_model=drone,
-                         num_drones=num_drones,
-                         control_by_RL_mask=control_by_RL_mask.astype(bool),
-                         initial_xyzs=INIT_XYZS,
-                         initial_rpys=INIT_RPYS,
-                         physics=Physics.PYB,
-                         neighbourhood_radius=10,
-                         pyb_freq=simulation_freq_hz,
-                         ctrl_freq=control_freq_hz,
-                         flocking_freq_hz=flocking_freq_hz,
-                         decision_freq_hz=decision_freq_hz,
-                         gui=gui,
-                         record=record_video,
-                         obstacles=obstacles,
-                         user_debug_gui=user_debug_gui,
-                         default_flight_height=default_flight_height,
-                         use_reynolds=True)
-
-    #### Obtain the PyBullet Client ID from the environment ####
-    PYB_CLIENT = env.getPyBulletClient()
-    DRONE_IDS = env.getDroneIds()  # 6架无人机为 [1,2,3,4,5,6]
-
-    #### Compute number of control steps in the simlation ######
-    PERIOD = duration_sec
-
-    #### Initialize the logger #################################
-    logger = Logger(logging_freq_hz=control_freq_hz,
-                    num_drones=num_drones,
-                    output_folder=output_folder,
-                    colab=colab)
-
-    #### Run the simulation ####################################
-    action = np.zeros((num_drones, 2))  # 在 flocking_freq 时刻更新 action 即可
-    START = time.time()
-
-    ##### main_loop ##########################################
-    for i in range(0, int(duration_sec * env.DECISION_FREQ_HZ)):
-
-        ############################################################
-        # for j in range(3): env._showDroneLocalAxes(j)
-
-        #### Step the simulation ###################################
-        obs, reward, terminated, truncated, info = env.step(action)
-
-        #### Compute the current action#############
-        # action = env.computeYawActionTSP(obs)
-
-        #### Log the simulation ####################################
-        for j in range(num_drones):
-            logger.log(drone=j,
-                       timestamp=i / env.DECISION_FREQ_HZ,
-                       state=env.drone_states[j],
-                       control=np.hstack([env.target_vs[j, :3],
-                                          np.zeros(9)]))
-
-        #### Printout ##############################################
-        env.render()
-
-        #### Sync the simulation ###################################
-        # sync 需要传入 ctrl_time_gap 与 ctrl_count
-        if gui:
-            sync(i, START, 1 / env.DECISION_FREQ_HZ)
-
-    #### Close the environment #################################
-    env.close()
-
-    #### Plot the simulation results ###########################
-    # logger.save_as_csv("vel")  # Optional CSV save
-    if plot:
-        logger.plot()
-        logger.plot_traj()
 
 
 if __name__ == "__main__":
@@ -333,6 +237,5 @@ if __name__ == "__main__":
         metavar='')
     # 这里需要添加 args = [] 才能使用 vscode 进行 debug
     ARGS = parser.parse_args(args=[])
-    # run(**vars(ARGS))
 
     learn(**vars(ARGS))
