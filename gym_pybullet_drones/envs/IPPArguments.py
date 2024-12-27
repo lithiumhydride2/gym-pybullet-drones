@@ -11,7 +11,7 @@ class IPPArguments:
             self.DEFAULT_USER_DEBUG_GUI = True
             self.VEC_ENV_CLS = DummyVecEnv
         else:
-            self.N_ENVS = 32
+            self.N_ENVS = 16
             self.DEFAULT_GUI = False
             self.DEFAULT_USER_DEBUG_GUI = False
             self.VEC_ENV_CLS = DummyVecEnv

@@ -776,9 +776,9 @@ class FlockingAviary(BaseRLAviary):
                 ## Unc reward 都是累计 reward, 需要即使奖励
                 preds = self.decisions[nth].cache["preds"]
                 observed_target = 0
-                ## TODO: 这里为了获取即时奖励，调整了 阈值
+                ## TODO: 这里是测试训练使用的另一个阈值
                 for pred in preds:
-                    if np.max(pred) > 0.9:
+                    if np.max(pred) > 0.6:
                         observed_target += 1
                 if observed_target == 0:
                     observed_target = -1
