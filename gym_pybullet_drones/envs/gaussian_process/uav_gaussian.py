@@ -140,8 +140,11 @@ class UAVGaussian():
         all_pred, all_std, self.cache["preds"], self.cache[
             "stds"] = self.GP_detection.update_grids(time)
         # update node feature
-        node_feature = self.update_node_feature()
+        # node_feature = self.update_node_feature()
         # node_feature = self.GP_detection.update_node_feature(time, node_coords)
+
+        ### 新版本的 node_feature
+        node_feature = self.get_node_feature()
         self.cache["all_std"] = all_std
         self.cache["all_pred"] = all_pred
         return all_std, node_feature
@@ -162,6 +165,32 @@ class UAVGaussian():
                 yaw_feature[id] = yaw / np.linalg.norm(yaw)
 
         return yaw_feature
+
+    def get_yaw_feature_of_target(self, gp_preds, node_index):
+        '''
+        从 gp_preds 中获取关于 node_index 的图特征 
+        Args:
+            gp_preds: GP 对于所有目标的 pred
+            node_indx: 当前在图中所处的位置
+        '''
+        # 图中的节点为， 所有潜在的邻近目标
+        # 图中的边为， 当前 node_index 对所有邻居的连接关系
+        num_target = gp_preds.shape[0]
+        grid_size = self.GP_detection.GPs[0].grid_size
+
+        yaw_feature_of_target = np.zeros((num_target, 2))
+        belief_feature = np.zeros((num_target, 1))
+        for target_id, gp_pred in enumerate(gp_preds):
+            if np.max(gp_pred[self.fov_masks[node_index].astype(
+                    bool)]) > IPPArg.EXIST_THRESHOLD:
+                max_row, max_col = np.unravel_index(gp_pred.argmax(),
+                                                    (grid_size, grid_size))
+                yaw = np.asarray(
+                    [max_row - grid_size / 2, max_col - grid_size / 2])
+                yaw_feature_of_target[target_id] = yaw / np.linalg.norm(yaw)
+                belief_feature[target_id] = np.max(
+                    gp_pred[self.fov_masks[node_index].astype(bool)])
+        return np.hstack((yaw_feature_of_target, belief_feature))
 
     def update_node_feature(self):
         '''
@@ -195,6 +224,34 @@ class UAVGaussian():
         node_feature = node_feature.transpose(1, 0, 2).reshape(
             self.node_coords.shape[0], -1)  #(node,target * feature)
         return node_feature
+
+    def get_node_feature(self):
+        '''
+        获取图形式的观测特征, 在当前 node_coords 处, 获得包含所有目标的 feature
+        Args:
+            curr_index: 当前所在节点位置的索引
+        Return:
+            node_feature: in shape (graph_size. target, feature)
+        '''
+        # node_feature [num_target, num_feature]
+        # edge_index [2,num_edges] 源节点索引->目标节点索引
+        # edge_attr [num_edges, num_feature]
+        # pos 节点位置 [num_target,3]
+
+        ### node 由 ego 与所有潜在目标构成, feature
+        node_features = []
+        for index in range(self.node_coords.shape[0]):
+            curr_node_feature = np.hstack(
+                (self.node_coords[index].reshape(1, -1), np.asarray([[1]])))
+            target_node_feature = self.get_yaw_feature_of_target(
+                self.cache["preds"], index)
+            node_features.append(
+                np.vstack((curr_node_feature, target_node_feature)))
+
+        node_features = np.asarray(node_features).reshape(
+            self.node_coords.shape[0],
+            -1)  # (graph_size, num_drone * feature(yaw,belief))
+        return node_features
 
     def __get_fov_mask(self, fov_vector):
         '''
@@ -232,7 +289,7 @@ class UAVGaussian():
                                               ego_heading=ego_heading,
                                               time=curr_time)
         # node_inputs 为 node_coords 与 node_feature 的结合
-        node_inputs = np.concatenate((self.node_coords, node_feature), axis=1)
+        node_inputs = node_feature
         history_pool_inputs, dt_pool_inputs = self.avg_pool_node_inputs(
             node_inputs)
 

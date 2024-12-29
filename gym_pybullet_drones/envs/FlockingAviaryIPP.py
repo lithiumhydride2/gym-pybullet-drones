@@ -128,10 +128,9 @@ class FlockingAviaryIPP(FlockingAviary):
                 Box(
                     low=0.,
                     high=1.,
-                    shape=(
-                        IPPArg.history_size // IPPArg.history_stride,
-                        IPPArg.sample_num, 2 + (self.NUM_DRONES - 1) * 6
-                    ),  # node_coord and feature (target * (mean,std,pred_mean,pred_std, node_coord))
+                    shape=(IPPArg.history_size // IPPArg.history_stride,
+                           IPPArg.sample_num,
+                           self.NUM_DRONES * 3),  # 3: (yaw_coord, belief)
                     dtype=np.float32),
                 "dt_pool_inputs":
                 Box(low=-np.inf,

@@ -7,8 +7,8 @@ class IPPArguments:
     def __init__(self):
         if __debug__:
             self.N_ENVS = 1
-            self.DEFAULT_GUI = True
-            self.DEFAULT_USER_DEBUG_GUI = True
+            self.DEFAULT_GUI = False
+            self.DEFAULT_USER_DEBUG_GUI = False
             self.VEC_ENV_CLS = DummyVecEnv
         else:
             self.N_ENVS = 16
@@ -29,14 +29,14 @@ class IPPArguments:
 
         # 选取前 32 大的特征值，这里抛去第一大特征值，因此最大为 sample_num - 1
         self.num_eigen_value = min(32, self.sample_num - 1)
-        self.history_size = 10  # avgpool 10 个历史时刻， 在 decision_freq 为 2hz 情况下，约使用 5s 的历史数据
+        self.history_size = 5  # avgpool 10 个历史时刻， 在 decision_freq 为 2hz 情况下，约使用 5s 的历史数据
         self.history_stride = 1  # set 1 to disable pooling
         ### parameter of attention_net
         self.EMBEDDING_DIM = 128
         self.N_HEAD = 4  # head num of decoder
         self.N_LAYER = 1
         self.NODE_COORD_DIM = 2
-        self.BELIEF_FEATURE_DIM = 4  # mean, std, predict_mean, predict_std
+        self.BELIEF_FEATURE_DIM = 3  # yaw_heading, belief
         self.PREDICT_FEATURE_TIME = 2.0  # [s] 使用 GP 预测 2s 后的特征
         self.dt_normlization = 1.993 * 3  # UNC WITH 1% uncertainty , 时间维度的归一化参数
         self.DECISION_FREQ = 2

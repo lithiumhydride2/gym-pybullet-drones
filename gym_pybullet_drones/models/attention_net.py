@@ -24,6 +24,7 @@ SOFTWARE.
 
 import torch
 import torch.nn as nn
+import torch_geometric.nn as gnn
 import math
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence
@@ -314,58 +315,41 @@ class AttentionNet(nn.Module):
                         dt_pool_inputs: torch.Tensor,
                         mask=None):
         """
+        Description:
+            spatio_attention, 做 node_coords 维度的 attention
         Args:
             node_inputs: (batch, history_size, graph_size,2 +  num_target * feature) 
             dt_pool_inputs: (batch, history_size, 1)
         """
 
         batch_size, history_size, graph_size, input_dim = node_inputs.shape
-        target_num = (input_dim - 2) // IPPArg.BELIEF_FEATURE_DIM
-        # reshape node_inputs , 消除 graph_size 的 dim
+        target_num = input_dim // IPPArg.BELIEF_FEATURE_DIM  # ego and all target
         node_inputs = node_inputs.reshape(-1, 1, input_dim)
-        ### node_coord_embedding 最后一个维度的前两部分为 node_coord
-        node_coord_embedding = self.node_coord_embedding(
-            node_inputs[:, :, :2]
-        )  #(graph_size * history_size , 1,embedding_dim)
-        ### target belief embedding
-        target_belief_embedding = torch.cat(
+
+        ### ego_feature 和 target_feature 使用同一个 embedding
+        feature_embedding = torch.cat(
             [
                 self.belief_embedding(
-                    node_inputs[:, :, 2 + i * IPPArg.BELIEF_FEATURE_DIM:2 +
-                                (1 + i) * IPPArg.BELIEF_FEATURE_DIM])
+                    node_inputs[:, :, i * IPPArg.BELIEF_FEATURE_DIM:(1 + i) *
+                                IPPArg.BELIEF_FEATURE_DIM])
                 for i in range(target_num)
             ],
-            dim=1)  # (graph_size * history_size , target_num, embedding_dim)
-        ### yaw feature embedding feature
-        yaw_feature_embedding = self.yaw_feature_embedding(node_inputs[:, :,
-                                                                       -2:])
-        # embedded_feature
-        embedded_feature = torch.cat(
-            (node_coord_embedding, target_belief_embedding), dim=1)
-        embedded_feature: torch.Tensor = self.target_encoder(
-            node_coord_embedding, embedded_feature
-        )  #(batch_size * history_size * graph_size, 1, embedding_dim)
-        ## 添加 yaw_heading 的 attention
-        embedded_feature += self.yaw_feature_encoder(node_coord_embedding,
-                                                     yaw_feature_embedding)
-        embedded_feature = embedded_feature.reshape(batch_size, history_size,
-                                                    graph_size,
-                                                    IPPArg.EMBEDDING_DIM)
-        # 将 batch_size 和 graph_size 压缩
-        embedded_feature = embedded_feature.permute(0, 2, 1, 3).reshape(
-            -1, history_size, IPPArg.EMBEDDING_DIM
-        )  #(batch_size, graph_size,histroy_size, embedding_dim)
-
-        # 处理 dt_pool_inputs 特征， 需有 （batch_size * graph_size, history_size, 1）的维度
+            dim=1)  #(b * h * graph_size , target_num, embedding)
+        feature_embedding = self.target_encoder(feature_embedding[:, :1, :],
+                                                feature_embedding)
+        feature_embedding = feature_embedding.reshape(batch_size, history_size,
+                                                      graph_size,
+                                                      IPPArg.EMBEDDING_DIM)
+        feature_embedding = feature_embedding.permute(0, 2, 1, 3).reshape(
+            -1, history_size, IPPArg.EMBEDDING_DIM)
         dt_pool_inputs = dt_pool_inputs.unsqueeze(1).repeat(
             1, graph_size, 1, 1).reshape(-1, history_size, 1)
 
-        ## timefusion layer
-        embedded_feature += self.timefusion_layer(dt_pool_inputs)
+        feature_embedding += self.timefusion_layer(dt_pool_inputs)
 
         ### 使用最新特征与其他历史特征做 cross-attention
         embedded_temporal_feature: torch.Tensor = self.temporal_encoder(
-            embedded_feature[:, -1:, :], embedded_feature)
+            feature_embedding[:, -1:, :], feature_embedding)
         embedded_temporal_feature = embedded_temporal_feature.reshape(
             batch_size, graph_size, IPPArg.EMBEDDING_DIM)
         return embedded_temporal_feature
@@ -393,7 +377,7 @@ class AttentionNet(nn.Module):
         embedded_feature = self.spatio_encoder(
             embedded_feature)  # shape (batch, graph_size, embedding_dim)
 
-        ## dist_inputs todo, 此处未添加
+        #
         embedded_feature = self.distfusion_layer(
             torch.cat((embedded_feature, dist_inputs), dim=-1))
         # 提取 node feature

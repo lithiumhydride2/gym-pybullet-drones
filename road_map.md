@@ -72,6 +72,7 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [ ] 在 stamp 中， history pool 评估的是智能体的历史移动，但我的 avgpool 可能起不到这个作用
 
 - [ ] 我可以做什么，使用 GP 估计 yaw 角度，是不是可以做出一些不同的特征 
+- [ ] 这里考虑使用 显示的图神经网络 对无人机获得 action 进行建模
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash
