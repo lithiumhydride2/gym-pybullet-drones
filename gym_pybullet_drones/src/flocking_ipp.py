@@ -14,27 +14,18 @@ The drones use interal PID control to track a target velocity.
 
 """
 import os
-import time
 import argparse
 from datetime import datetime
 import numpy as np
 import pybullet as p
-import pdb
-import gymnasium as gym
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
-from gym_pybullet_drones.envs.FlockingAviary import FlockingAviary
 from gym_pybullet_drones.envs.FlockingAviaryIPP import FlockingAviaryIPP
 from gym_pybullet_drones.models.IPPActorCriticPolicy import IPPActorCriticPolicy
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
-from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement, CallbackList, CheckpointCallback
 from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationType, FOVType
-from gymnasium.envs.registration import register
 from gym_pybullet_drones.envs.IPPArguments import IPPArg
 
 DEFAULT_DRONE = DroneModel("vswarm_quad/vswarm_quad_dae")
@@ -83,7 +74,8 @@ def learn(drone=DEFAULT_DRONE,
           obs=DEFAULT_OBS_TYPE,
           act=DEFAULT_ACT_TYPE,
           control_by_RL_mask=DEFAULT_CONTROL_BY_RL_MASK,
-          random_point=DEFAULT_RANDOM_POINT):
+          random_point=DEFAULT_RANDOM_POINT,
+          continue_train=None):
 
     filename = os.path.join(
         output_folder, 'save-' + datetime.now().strftime("%m.%d.%Y_%H.%M.%S"))
@@ -132,29 +124,40 @@ def learn(drone=DEFAULT_DRONE,
 
     ### train the model
     # USE USER POLICY
+
     model = PPO(policy=IPPActorCriticPolicy,
                 env=train_env,
                 verbose=1,
                 tensorboard_log=filename + '/tb/',
                 batch_size=128,
                 n_steps=256)  # n_steps 为交互 step 后， 更新 policy
-
+    if continue_train is not None:
+        model.load(continue_train, env=train_env)
     callback_on_best = StopTrainingOnNoModelImprovement(
         max_no_improvement_evals=int(1e2), min_evals=int(1e3), verbose=1)
 
-    callback = EvalCallback(eval_env=eval_env,
-                            callback_on_new_best=callback_on_best,
-                            verbose=1,
-                            best_model_save_path=filename + '/',
-                            log_path=filename + '/',
-                            eval_freq=int(1e3),
-                            deterministic=True,
-                            render=False)
+    eval_call_back = EvalCallback(eval_env=eval_env,
+                                  callback_on_new_best=callback_on_best,
+                                  verbose=1,
+                                  best_model_save_path=filename + '/',
+                                  log_path=filename + '/',
+                                  eval_freq=int(1e3),
+                                  deterministic=True,
+                                  render=False)
+    check_point_call_back = CheckpointCallback(save_freq=int(1e4),
+                                               save_path=filename +
+                                               '/checkpoints/',
+                                               save_replay_buffer=False)
+    callback = CallbackList([eval_call_back, check_point_call_back])
+    try:
+        model.learn(total_timesteps=int(1e6),
+                    callback=callback,
+                    log_interval=100,
+                    progress_bar=True)  # TODO: 改为 True
+    except:
+        print(" 中断，保存模型 ")
+        model.save(filename + '/model_interruupted.zip')
 
-    model.learn(total_timesteps=int(1e6),
-                callback=callback,
-                log_interval=100,
-                progress_bar=True)  # TODO: 改为 True
     model.save(filename + '/final_model.zip')
     print(filename)
 
@@ -235,7 +238,12 @@ if __name__ == "__main__":
         type=bool,
         help='Whether example is being run by a notebook (default: "False")',
         metavar='')
+    parser.add_argument('--continue_train',
+                        default=None,
+                        type=str,
+                        metavar='',
+                        help="If none, continue train from abs path")
     # 这里需要添加 args = [] 才能使用 vscode 进行 debug
-    ARGS = parser.parse_args(args=[])
+    ARGS = parser.parse_args()
 
     learn(**vars(ARGS))
