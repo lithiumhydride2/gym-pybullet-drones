@@ -9,7 +9,7 @@ class IPPArguments:
             self.N_ENVS = 1
             self.DEFAULT_GUI = False
             self.DEFAULT_USER_DEBUG_GUI = False
-            self.VEC_ENV_CLS = DummyVecEnv
+            self.VEC_ENV_CLS = SubprocVecEnv
         else:
             self.N_ENVS = 16
             self.DEFAULT_GUI = False
@@ -23,7 +23,7 @@ class IPPArguments:
         self.sample_num = 12  # 应当为一个偶数
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
         #### terminated
-        self.MAX_EPISODE_LEN = 180  # max length of an episode / s
+        self.MAX_EPISODE_LEN = 300  # max length of an episode / s
         self.TERMINATE_MIN_DIS = 1.0
         self.TERMINATE_MAX_DIS = 5.0
 

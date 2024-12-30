@@ -65,14 +65,19 @@ def in_fov(point, fov_vector):
     point = point[:2]  # 仅在水平面上进行判断
     fov_vector = fov_vector[:, :2]
     # 由于 fov 可能是大于 pi 的，因此需要这个判断
-    return_val = (np.cross(fov_vector[0], fov_vector[1]) *
-                  np.dot(fov_vector[0], fov_vector[1])) < 0
-    if ~return_val:
+    try:
+        return_val = (np.cross(fov_vector[0], fov_vector[1]) *
+                      np.dot(fov_vector[0], fov_vector[1])) < 0
+    except:
+        print("fov_vector is : ")
+        print(fov_vector)
+        return_val = True
+    if not return_val:
         fov_vector = fov_vector[::-1]
     if np.cross(fov_vector[0], point) >= 0 and np.cross(point,
                                                         fov_vector[1]) >= 0:
         return return_val
-    return ~return_val
+    return not return_val
 
 
 def normalize_radians(angle):
