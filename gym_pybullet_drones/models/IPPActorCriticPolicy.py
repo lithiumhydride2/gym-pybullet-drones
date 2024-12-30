@@ -10,7 +10,7 @@ import torch
 
 class IPPFeaturesExtractor(BaseFeaturesExtractor):
 
-    def __init__(self, observation_space, features_dim=IPPArg.sample_num):
+    def __init__(self, observation_space, features_dim=IPPArg.k_size):
         super().__init__(observation_space, features_dim)
         #TODO: 需要看看 attnetion_net 中实现了哪些内容， 对于我减少观测数量与类型的 obs 应当设计怎样的 attention_net
         self.attention_net = AttentionNet(IPPArg.EMBEDDING_DIM)  # Args todo
@@ -24,10 +24,13 @@ class IPPFeaturesExtractor(BaseFeaturesExtractor):
         '''
         # stable_baselines3 自动转换observation并添加 batch dim
 
-        return self.attention_net(node_inputs=observation["node_inputs"],
-                                  dt_pool_inputs=observation["dt_pool_inputs"],
-                                  current_index=observation["curr_index"],
-                                  dist_inputs=observation["dist_inputs"])
+        return self.attention_net(
+            node_inputs=observation["node_inputs"],
+            dt_pool_inputs=observation["dt_pool_inputs"],
+            edge_inputs=observation["edge_inputs"],
+            current_index=observation["curr_index"],
+            pos_encoding=observation["graph_pos_encoding"],
+            dist_inputs=observation["dist_inputs"])
 
 
 class IPPActorCriticPolicy(ActorCriticPolicy):

@@ -303,7 +303,8 @@ class AttentionNet(nn.Module):
                                       n_head=IPPArg.N_HEAD,
                                       n_layer=IPPArg.N_LAYER)
         self.distfusion_layer = nn.Linear(embedding_dim + 1, embedding_dim)
-
+        self.spatio_pos_embedding = nn.Linear(IPPArg.num_eigen_value,
+                                              embedding_dim)
         self.spatio_decoder = Decoder(
             embedding_dim=IPPArg.EMBEDDING_DIM,
             n_head=IPPArg.N_HEAD,
@@ -367,23 +368,34 @@ class AttentionNet(nn.Module):
 
     def spatio_attention(self,
                          embedded_feature: torch.Tensor,
+                         edge_inputs: torch.Tensor,
                          curr_index: torch.Tensor,
+                         pos_encoding,
                          dist_inputs,
                          spatio_mask=None):
         '''
         Args:
             embedded_feature : (batch, graph_size, embedding_dim)
+            edge_inputs: (batch, graph_size, k_size), k_size for KNN , 连接关系
+            pos_encoding: (batch. graph_size, num_eigen_value ), 图的 laplace 矩阵的 eigen_value 
             curr_index: (batch, 1 , 1) curr_index in range(0,graph_size)
             dist_inputs: (batch, graph_size, 1)
             spatio_mask: 限制当前节点只能访问想连接的节点
         '''
-        batch_size, graph_size, _ = embedded_feature.shape
+        batch_size, graph_size, knn_size = edge_inputs.shape
+        current_edge = torch.gather(
+            edge_inputs, dim=1, index=curr_index.repeat(
+                1, 1,
+                knn_size)).long()  # 仅在 knn_size 维度repeat , (batch,1, knn_size)
+        current_edge = current_edge.permute(
+            0, 2, 1)  # (batch, knn_size , 1) ,1 is for current node
 
         if spatio_mask is None:
-            mask = torch.zeros((batch_size, 1, graph_size), dtype=torch.bool)
+            mask = torch.zeros((batch_size, 1, knn_size), dtype=torch.bool)
         else:
             raise NotImplementedError
-
+        # eigen_value 矩阵的 fature
+        embedded_feature += self.spatio_pos_embedding(pos_encoding)
         #### self attention for embedded featute
         embedded_feature = self.spatio_encoder(
             embedded_feature)  # shape (batch, graph_size, embedding_dim)
@@ -396,12 +408,16 @@ class AttentionNet(nn.Module):
                                          dim=1,
                                          index=curr_index.repeat(
                                              1, 1, IPPArg.EMBEDDING_DIM))
-
+        connected_nodes_feature = torch.gather(embedded_feature,
+                                               dim=1,
+                                               index=current_edge.repeat(
+                                                   1, 1, IPPArg.EMBEDDING_DIM))
         embedded_spatio_feature = self.spatio_decoder(curr_node_feature,
-                                                      embedded_feature, mask)
+                                                      connected_nodes_feature,
+                                                      mask)
         # 做 embedded_spatio_feature 与 connected_nodes_feature 的 cross-attention, 输出 logp_list
         logp_list: torch.Tensor = self.pointer(embedded_spatio_feature,
-                                               embedded_feature, mask)
+                                               connected_nodes_feature, mask)
         logp_list = logp_list.squeeze(dim=1)  # 去除冗余维度 (1, k_size)
         value = None
 
@@ -410,7 +426,9 @@ class AttentionNet(nn.Module):
     def forward(self,
                 node_inputs,
                 dt_pool_inputs,
+                edge_inputs,
                 current_index: torch.Tensor,
+                pos_encoding,
                 dist_inputs,
                 mask=None):
         """
@@ -418,6 +436,7 @@ class AttentionNet(nn.Module):
             node_inputs: (batch, history_size, graph_size,2 +  num_target * feature) , feature(mean,std)
             dt_pool_inputs: (batch, history_size, 1)
             edge_inputs: (batch, graph_size, k_size), k_size for KNN , 连接关系
+            pos_encoding: (batch, graph_size, num_eigen_value) , 图的 laplace 矩阵的 eigen_value 
             current_index: (batch, 1 , 1) curr_index in range(0,graph_size)
             dist_inputs: (batch, graph_size, 1)
         """
@@ -428,7 +447,9 @@ class AttentionNet(nn.Module):
                                                     dt_pool_inputs,
                                                     mask=mask)
             logp_list, value = self.spatio_attention(embedded_feature,
+                                                     edge_inputs,
                                                      current_index,
+                                                     pos_encoding,
                                                      dist_inputs,
                                                      spatio_mask=None)
         # 不返回 value, value_net 由 stable_baselines3 自动添加
