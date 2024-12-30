@@ -63,16 +63,18 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [x] 和每一个 node 连接的节点数量需要多一点，以能够再次发现目标
 - [x] 先减少训练时，无人机的数量，
 
-- [ ] 还是需要考虑 FOV 对不确定性的影响, 这里也是
-- [ ] 如何建模 reward function ？ 归一化 ？
+- [ ] 还是需要考虑 FOV 对不确定性的影响, 这里也是 TODO 
+- [x] 如何建模 reward function ？ 归一化 ？
 
 ### NODE feature:
 - [ ] 这里并没有借助 Gaussian 过程的预测功能，来 有意义地 评估 node feature
-- [ ] 减少问题的复杂度，减少图中节点的数量测试，减少历史的累加程度进行测试 
-- [ ] 在 stamp 中， history pool 评估的是智能体的历史移动，但我的 avgpool 可能起不到这个作用
+- [x] 减少问题的复杂度，减少图中节点的数量测试，减少历史的累加程度进行测试 
+- [x] 在 stamp 中， history pool 评估的是智能体的历史移动，但我的 avgpool 可能起不到这个作用
 
 - [ ] 我可以做什么，使用 GP 估计 yaw 角度，是不是可以做出一些不同的特征 
 - [ ] 这里考虑使用 显示的图神经网络 对无人机获得 action 进行建模
+
+- [ ] 下一步考虑 将每一个 node_coords 的观测情况的 laplace 矩阵的特征值作为 feature 输入
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash

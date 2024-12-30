@@ -282,10 +282,11 @@ class AttentionNet(nn.Module):
         '''
         super(AttentionNet, self).__init__()
 
-        self.node_coord_embedding = nn.Linear(IPPArg.NODE_COORD_DIM,
-                                              embedding_dim)
-        self.yaw_feature_embedding = nn.Linear(IPPArg.NODE_COORD_DIM,
-                                               embedding_dim)
+        self.feature_embedding = nn.Sequential(
+            nn.Linear(IPPArg.BELIEF_FEATURE_DIM, IPPArg.EMBEDDING_DIM // 2),
+            nn.ReLU(),
+            nn.Linear(IPPArg.EMBEDDING_DIM // 2, IPPArg.EMBEDDING_DIM),
+            nn.ReLU())
         self.belief_embedding = nn.Linear(IPPArg.BELIEF_FEATURE_DIM,
                                           embedding_dim)
         self.target_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
@@ -318,38 +319,48 @@ class AttentionNet(nn.Module):
         Description:
             spatio_attention, 做 node_coords 维度的 attention
         Args:
-            node_inputs: (batch, history_size, graph_size,2 +  num_target * feature) 
+            node_inputs: (batch, history_size, graph_size,num_drone * feature) 
             dt_pool_inputs: (batch, history_size, 1)
         """
 
         batch_size, history_size, graph_size, input_dim = node_inputs.shape
         target_num = input_dim // IPPArg.BELIEF_FEATURE_DIM  # ego and all target
-        node_inputs = node_inputs.reshape(-1, 1, input_dim)
 
-        ### ego_feature 和 target_feature 使用同一个 embedding
-        feature_embedding = torch.cat(
-            [
-                self.belief_embedding(
-                    node_inputs[:, :, i * IPPArg.BELIEF_FEATURE_DIM:(1 + i) *
-                                IPPArg.BELIEF_FEATURE_DIM])
-                for i in range(target_num)
-            ],
-            dim=1)  #(b * h * graph_size , target_num, embedding)
-        feature_embedding = self.target_encoder(feature_embedding[:, :1, :],
-                                                feature_embedding)
-        feature_embedding = feature_embedding.reshape(batch_size, history_size,
-                                                      graph_size,
-                                                      IPPArg.EMBEDDING_DIM)
-        feature_embedding = feature_embedding.permute(0, 2, 1, 3).reshape(
-            -1, history_size, IPPArg.EMBEDDING_DIM)
+        node_inputs = node_inputs.reshape(batch_size, history_size, graph_size,
+                                          target_num,
+                                          IPPArg.BELIEF_FEATURE_DIM)
+        target_feature_embedding: torch.Tensor = self.feature_embedding(
+            node_inputs)
+        # (batch_size, history_size, graph_size, target_num, embedding_dim)
+
+        graph_features = []
+        for i in range(graph_size):
+            target_feature = target_feature_embedding[:, :,
+                                                      i, :, :]  #(batch_sizeb,history_size,target_num,128)
+            target_feature = target_feature.reshape(
+                -1, target_num, IPPArg.EMBEDDING_DIM
+            )  #(batch_sizeb*history_size,target_num,128)
+            target_feature = self.target_encoder(
+                target_feature[:, :1, :],
+                target_feature)  # cross_attention (b*h,1,128)
+            graph_features.append(target_feature)
+
+        graph_features = torch.cat(graph_features,
+                                   dim=1)  #(b*h,graph_size,128)
+        graph_features = graph_features.reshape(batch_size, history_size,
+                                                graph_size,
+                                                IPPArg.EMBEDDING_DIM)
+        graph_features = graph_features.permute(0, 2, 1, 3).reshape(
+            -1, history_size, IPPArg.EMBEDDING_DIM)  #(b*g,history_size,128)
+
+        # tim_fusion_layer
         dt_pool_inputs = dt_pool_inputs.unsqueeze(1).repeat(
             1, graph_size, 1, 1).reshape(-1, history_size, 1)
-
-        feature_embedding += self.timefusion_layer(dt_pool_inputs)
+        graph_features += self.timefusion_layer(dt_pool_inputs)
 
         ### 使用最新特征与其他历史特征做 cross-attention
         embedded_temporal_feature: torch.Tensor = self.temporal_encoder(
-            feature_embedding[:, -1:, :], feature_embedding)
+            graph_features[:, -1:, :], graph_features)
         embedded_temporal_feature = embedded_temporal_feature.reshape(
             batch_size, graph_size, IPPArg.EMBEDDING_DIM)
         return embedded_temporal_feature

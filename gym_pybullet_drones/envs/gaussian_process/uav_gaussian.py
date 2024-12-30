@@ -231,7 +231,7 @@ class UAVGaussian():
         Args:
             curr_index: 当前所在节点位置的索引
         Return:
-            node_feature: in shape (graph_size. target, feature)
+            node_feature: in shape (graph_size, target, feature)
         '''
         # node_feature [num_target, num_feature]
         # edge_index [2,num_edges] 源节点索引->目标节点索引
