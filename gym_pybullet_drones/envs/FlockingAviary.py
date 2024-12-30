@@ -780,8 +780,6 @@ class FlockingAviary(BaseRLAviary):
                 for pred in preds:
                     if np.max(pred) > 0.6:
                         observed_target += 1
-                if observed_target == 0:
-                    observed_target = -1
                 reward += observed_target / (self.NUM_DRONES - 1)
                 ## 平滑性 reward
                 return reward

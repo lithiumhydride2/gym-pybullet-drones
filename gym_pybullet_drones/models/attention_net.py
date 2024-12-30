@@ -283,18 +283,18 @@ class AttentionNet(nn.Module):
         super(AttentionNet, self).__init__()
 
         self.feature_embedding = nn.Sequential(
-            nn.Linear(IPPArg.BELIEF_FEATURE_DIM, IPPArg.EMBEDDING_DIM // 2),
-            nn.ReLU(),
+            nn.Linear(2, IPPArg.EMBEDDING_DIM // 2), nn.ReLU(),
             nn.Linear(IPPArg.EMBEDDING_DIM // 2, IPPArg.EMBEDDING_DIM),
             nn.ReLU())
-        self.belief_embedding = nn.Linear(IPPArg.BELIEF_FEATURE_DIM,
-                                          embedding_dim)
+
+        self.belief_embedding = nn.Linear(1, embedding_dim)
+        self.belief_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
+                                      n_head=IPPArg.N_HEAD,
+                                      n_layer=IPPArg.N_LAYER)
         self.target_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
                                       n_head=IPPArg.N_HEAD,
                                       n_layer=IPPArg.N_LAYER)
-        self.yaw_feature_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
-                                           n_head=IPPArg.N_HEAD,
-                                           n_layer=IPPArg.N_LAYER)
+
         self.temporal_encoder = Decoder(embedding_dim=IPPArg.EMBEDDING_DIM,
                                         n_head=IPPArg.N_HEAD,
                                         n_layer=IPPArg.N_LAYER)
@@ -330,24 +330,41 @@ class AttentionNet(nn.Module):
         node_inputs = node_inputs.reshape(batch_size, history_size, graph_size,
                                           target_num,
                                           IPPArg.BELIEF_FEATURE_DIM)
+        # feature_dim 的前两个维度为 node_coord
         target_feature_embedding: torch.Tensor = self.feature_embedding(
-            node_inputs)
+            node_inputs[:, :, :, :, :2])
         # (batch_size, history_size, graph_size, target_num, embedding_dim)
 
+        # belief feature
+        belief_embedding: torch.Tensor = self.belief_embedding(
+            node_inputs[:, :, :, :, -1:])
+        belief_embedding = belief_embedding.reshape(-1, target_num,
+                                                    IPPArg.EMBEDDING_DIM)
+        belief_feature: torch.Tensor = self.target_encoder(
+            belief_embedding[:, :1, :], belief_embedding)
+        # reshape
+        belief_feature = belief_feature.reshape(
+            -1, graph_size, IPPArg.EMBEDDING_DIM)  #(b*h,graph,128)
         graph_features = []
+
+        ## yaw feature
         for i in range(graph_size):
             target_feature = target_feature_embedding[:, :,
-                                                      i, :, :]  #(batch_sizeb,history_size,target_num,128)
+                                                      i, :, :]  #(batch_sizeb,history_size,target_num,128 + 1)
             target_feature = target_feature.reshape(
                 -1, target_num, IPPArg.EMBEDDING_DIM
-            )  #(batch_sizeb*history_size,target_num,128)
+            )  #(batch_sizeb*history_size,target_num,128 + 1)
             target_feature = self.target_encoder(
                 target_feature[:, :1, :],
                 target_feature)  # cross_attention (b*h,1,128)
             graph_features.append(target_feature)
 
+        ### cross-attention
         graph_features = torch.cat(graph_features,
                                    dim=1)  #(b*h,graph_size,128)
+        graph_features = self.belief_encoder(
+            graph_features, torch.cat((graph_features, belief_feature), dim=1))
+        #### belief graph cross
         graph_features = graph_features.reshape(batch_size, history_size,
                                                 graph_size,
                                                 IPPArg.EMBEDDING_DIM)
@@ -399,7 +416,6 @@ class AttentionNet(nn.Module):
         #### self attention for embedded featute
         embedded_feature = self.spatio_encoder(
             embedded_feature)  # shape (batch, graph_size, embedding_dim)
-
         #
         embedded_feature = self.distfusion_layer(
             torch.cat((embedded_feature, dist_inputs), dim=-1))

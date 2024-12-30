@@ -20,8 +20,8 @@ class IPPArguments:
         self.RANDOM_POINT = False  # 是否随机生成目标点，当前参数为 circle_7
         self.NUM_DRONE = 4
         #### graph
-        self.k_size = 10  # knn
-        self.sample_num = 36
+        self.k_size = 3  # knn
+        self.sample_num = 20
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
         #### terminated
         self.MAX_EPISODE_LEN = 180  # max length of an episode / s
