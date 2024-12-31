@@ -336,27 +336,30 @@ class AttentionNet(nn.Module):
         # (batch_size, history_size, graph_size, target_num, embedding_dim)
 
         # belief feature
-        belief_embedding: torch.Tensor = self.belief_embedding(
-            node_inputs[:, :, :, :, -1:])
-        belief_embedding = belief_embedding.reshape(-1, target_num,
-                                                    IPPArg.EMBEDDING_DIM)
-        belief_feature: torch.Tensor = self.target_encoder(
-            belief_embedding[:, :1, :], belief_embedding)
+        belief_embedding = torch.softmax(torch.sum(node_inputs[:, :, :, :,
+                                                               -1:],
+                                                   dim=3),
+                                         dim=2)
+        belief_feature = self.belief_embedding(belief_embedding)
+
         # reshape
         belief_feature = belief_feature.reshape(
             -1, graph_size, IPPArg.EMBEDDING_DIM)  #(b*h,graph,128)
         graph_features = []
-
         ## yaw feature
         for i in range(graph_size):
             target_feature = target_feature_embedding[:, :,
-                                                      i, :, :]  #(batch_sizeb,history_size,target_num,128 + 1)
+                                                      i, :, :]  #(batch_size,history_size,target_num,128 + 1)
             target_feature = target_feature.reshape(
                 -1, target_num, IPPArg.EMBEDDING_DIM
             )  #(batch_sizeb*history_size,target_num,128 + 1)
+            ### 使用 belief 作为 mask
+            mask = node_inputs[:, :, i, :, -1:].reshape(-1, target_num,
+                                                        1).permute(0, 2, 1)
+            mask = (mask == 0).int()
             target_feature = self.target_encoder(
-                target_feature[:, :1, :],
-                target_feature)  # cross_attention (b*h,1,128)
+                target_feature[:, :1, :], target_feature,
+                mask=mask)  # cross_attention (b*h,1,128)
             graph_features.append(target_feature)
 
         ### cross-attention
