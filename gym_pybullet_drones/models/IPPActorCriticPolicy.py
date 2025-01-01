@@ -2,7 +2,7 @@ from functools import partial
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from stable_baselines3.common.policies import ActorCriticPolicy
 from gym_pybullet_drones.envs.IPPArguments import IPPArg
-from .attention_net import AttentionNet
+from .attention_net import AttentionNet, SampleNet
 from torch import nn
 import numpy as np
 import torch
@@ -13,7 +13,8 @@ class IPPFeaturesExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, features_dim=IPPArg.sample_num):
         super().__init__(observation_space, features_dim)
         #TODO: 需要看看 attnetion_net 中实现了哪些内容， 对于我减少观测数量与类型的 obs 应当设计怎样的 attention_net
-        self.attention_net = AttentionNet(IPPArg.EMBEDDING_DIM)  # Args todo
+        # self.attention_net = AttentionNet(IPPArg.EMBEDDING_DIM)  # Args todo
+        self.sample_net = SampleNet(IPPArg.EMBEDDING_DIM)
 
     def forward(self, observation):
         '''
@@ -22,6 +23,15 @@ class IPPFeaturesExtractor(BaseFeaturesExtractor):
         Return:
             return in shape (batch_size, features_dim )
         '''
+        curr_index = observation["curr_index"]
+        curr_index = curr_index.unsqueeze(-1).repeat(1, 5, 1, 12).long()
+        input = torch.gather(observation["node_inputs"],
+                             dim=2,
+                             index=curr_index)  #(bach,feature)
+        input = input[:, -1, :, :].reshape(-1, 12)
+        return self.sample_net(
+            torch.cat((observation["curr_index"].reshape(-1, 1), input),
+                      dim=1))
         # stable_baselines3 自动转换observation并添加 batch dim
 
         return self.attention_net(node_inputs=observation["node_inputs"],

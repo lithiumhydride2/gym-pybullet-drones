@@ -454,5 +454,28 @@ class AttentionNet(nn.Module):
         return logp_list
 
 
+class SampleNet(nn.Module):
+
+    def __init__(self, embedding_dim):
+        super(SampleNet, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.input_dim = 1 + IPPArg.NUM_DRONE * 3  # (yaw, belief, dist)
+        self.sample_embedding = nn.Sequential(
+            nn.Linear(self.input_dim, self.embedding_dim), nn.ReLU(),
+            nn.Linear(self.embedding_dim, self.embedding_dim), nn.ReLU())
+        self.actor = nn.Sequential(
+            nn.Linear(self.embedding_dim, IPPArg.sample_num),
+            nn.Softmax(dim=-1))
+
+    def forward(self, input):
+        '''
+        node_input
+        '''
+        x = input
+        features = self.sample_embedding(x)
+        action_probs = self.actor(features)
+        return action_probs
+
+
 if __name__ == '__main__':
     pass

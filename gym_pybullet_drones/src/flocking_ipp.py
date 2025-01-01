@@ -154,8 +154,9 @@ def learn(drone=DEFAULT_DRONE,
                     callback=callback,
                     log_interval=100,
                     progress_bar=True)  # TODO: 改为 True
-    except:
+    except Exception as e:
         print(" 中断，保存模型 ")
+        print(e)
         model.save(filename + '/model_interruupted.zip')
 
     model.save(filename + '/final_model.zip')
@@ -244,6 +245,6 @@ if __name__ == "__main__":
                         metavar='',
                         help="If none, continue train from abs path")
     # 这里需要添加 args = [] 才能使用 vscode 进行 debug
-    ARGS = parser.parse_args()
+    ARGS = parser.parse_args(args=[])
 
     learn(**vars(ARGS))
