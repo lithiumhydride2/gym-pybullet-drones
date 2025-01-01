@@ -69,12 +69,7 @@ class FlockingAviaryIPP(FlockingAviary):
 
     def step(self, action):
         # 使用当前 obs 后处理 action
-        curr_index = self.cache["obs"][self.control_by_RL_ID[0]]["curr_index"]
-        edge_inputs = self.cache["obs"][
-            self.control_by_RL_ID[0]]["edge_inputs"]
-        subprocess_action = edge_inputs[curr_index.item(), action.item()]
-
-        self.IPPEnvs[self.control_by_RL_ID[0]].step(subprocess_action)
+        self.IPPEnvs[self.control_by_RL_ID[0]].step(action)
 
         # step 中重新计算 obs 与 action
 
@@ -89,12 +84,12 @@ class FlockingAviaryIPP(FlockingAviary):
         for _ in range(self.DECISION_PER_CTRL - 1):
             # subclass step is in frequency of CTRL
             # repeat, flocking update in _preprocessAction
-            super().step(subprocess_action, need_return=False)
+            super().step(action, need_return=False)
 
-        while not finish_current_action(subprocess_action):
-            super().step(subprocess_action, need_return=False)
+        while not finish_current_action(action):
+            super().step(action, need_return=False)
         # last times
-        return super().step(subprocess_action, need_return=True)
+        return super().step(action, need_return=True)
 
     def reset(self, seed=None, options=None):
         '''
@@ -124,7 +119,7 @@ class FlockingAviaryIPP(FlockingAviary):
         IPP_YAW 模式下，选取动作方式为从当前 node_coords 的邻居中选取下一个节点
         '''
         if self.ACT_TYPE == ActionType.IPP_YAW:
-            return Discrete(IPPArg.k_size)
+            return Discrete(IPPArg.sample_num)
 
     def _observationSpace(self):
         if self.OBS_TYPE == ObservationType.IPP:
@@ -142,21 +137,11 @@ class FlockingAviaryIPP(FlockingAviary):
                     high=0.,
                     shape=(IPPArg.history_size // IPPArg.history_stride, 1),
                     dtype=np.float32),
-                "edge_inputs":
-                Box(low=0,
-                    high=IPPArg.sample_num - 1,
-                    shape=(IPPArg.sample_num, IPPArg.k_size),
-                    dtype=np.int32),
                 "curr_index":
                 Box(low=0,
                     high=IPPArg.sample_num - 1,
                     shape=(1, 1),
                     dtype=np.int64),
-                "graph_pos_encoding":
-                Box(low=0.,
-                    high=1.,
-                    shape=(IPPArg.sample_num, IPPArg.num_eigen_value),
-                    dtype=np.float32),
                 "dist_inputs":
                 Box(low=0.,
                     high=1.,
@@ -264,11 +249,10 @@ class IPPenv:
     def __init__(self, yaw_start, act_type):
 
         self.graph_control = GraphController(start=yaw_start,
-                                             k_size=IPPArg.k_size,
                                              act_type=act_type,
                                              random_sample=False)
         #生成图
-        self.node_coords, self.graph = self.graph_control.gen_graph(
+        self.node_coords, self.distance_matrix = self.graph_control.gen_graph(
             curr_coord=yaw_start,
             samp_num=IPPArg.sample_num,
             gen_range=IPPArg.gen_range)
@@ -283,26 +267,11 @@ class IPPenv:
         '''
         返回 IPPenv 获得的 obs
         '''
-        # 以 dict 形式获取观测
-
-        ### edge_inputs, 表示采样 node_coords 中节点的 knn 连接关系
-        edge_inputs = []
-        # 遍历 values， 不遍历 keys
-        for node in self.graph.values():
-            node_edges = list(map(int, node))
-            edge_inputs.append(node_edges)
-        edge_inputs = np.asarray(edge_inputs)
         # 计算 graph_pos_encoding
-        graph_pos_encoding = self.graph_pos_encoding(edge_inputs)
         ### curr_index
         curr_index = np.asarray(self.curr_node_index).reshape(-1, 1)
         dist_inputs = self.calc_distance_of_nodes(curr_index)
-        return {
-            "edge_inputs": edge_inputs,
-            "curr_index": curr_index,
-            "graph_pos_encoding": graph_pos_encoding,
-            "dist_inputs": dist_inputs
-        }
+        return {"curr_index": curr_index, "dist_inputs": dist_inputs}
 
     def calc_distance_of_nodes(self, current_index):
         '''
@@ -310,32 +279,9 @@ class IPPenv:
         
         使用 np.pi 进行归一化， 不相连节点距离设置为1
         '''
-        all_dist = np.ones((IPPArg.sample_num, 1)) * np.pi
-        for i in map(int, self.graph[f"{current_index.item()}"].keys()):
-            all_dist[i] = self.graph[f"{current_index.item()}"][f"{i}"].length
-
-        return np.asarray(all_dist).reshape(-1, 1) / np.pi
-
-    def graph_pos_encoding(self, edge_inputs):
-        '''
-        通过图的 laplace矩阵 的 特征向量 对节点进行编码，得到每个节点的低维位置表示。
-        '''
-        graph_size = IPPArg.sample_num
-        A_matrix = np.zeros((graph_size, graph_size))
-        D_matrix = np.zeros((graph_size, graph_size))
-        for i in range(graph_size):
-            for j in range(graph_size):
-                if j in edge_inputs[i] and i != j:
-                    A_matrix[i][j] = 1.0
-        for i in range(graph_size):
-            D_matrix[i][i] = 1 / np.sqrt(len(edge_inputs[i]) - 1)
-        L = np.eye(graph_size) - np.matmul(D_matrix, A_matrix, D_matrix)
-        eigen_values, eigen_vector = np.linalg.eig(L)
-        idx = eigen_values.argsort()
-        eigen_values, eigen_vector = eigen_values[idx], np.real(
-            eigen_vector[:, idx])
-        eigen_vector = eigen_vector[:, 1:IPPArg.num_eigen_value + 1]
-        return np.asarray(eigen_vector)  #(graph_size, num_eigen_value)
+        all_dist = self.distance_matrix[current_index.item()].reshape(
+            -1, 1) / np.pi
+        return all_dist
 
     def reset(self, yaw_start):
         '''
