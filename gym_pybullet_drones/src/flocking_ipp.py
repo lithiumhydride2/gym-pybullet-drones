@@ -128,9 +128,10 @@ def learn(drone=DEFAULT_DRONE,
     model = PPO(policy=IPPActorCriticPolicy,
                 env=train_env,
                 verbose=1,
+                learning_rate=1e-4,
                 tensorboard_log=filename + '/tb/',
-                batch_size=128,
-                n_steps=256)  # n_steps 为交互 step 后， 更新 policy
+                batch_size=256,
+                n_steps=4096)  # n_steps 为交互 step 后， 更新 policy
     if continue_train is not None:
         model.load(continue_train, env=train_env)
     callback_on_best = StopTrainingOnNoModelImprovement(

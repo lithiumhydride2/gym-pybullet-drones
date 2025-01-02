@@ -777,10 +777,11 @@ class FlockingAviary(BaseRLAviary):
                 preds = self.decisions[nth].cache["preds"]
                 observed_target = 0
                 ## TODO: 这里是测试训练使用的另一个阈值
+                ## TODO: 这里使用更加稠密断店奖励
                 for pred in preds:
                     if np.max(pred) > 0.6:
                         observed_target += 1
-                reward += observed_target / (self.NUM_DRONES - 1)
+                reward += observed_target
                 ## 平滑性 reward
                 return reward
 

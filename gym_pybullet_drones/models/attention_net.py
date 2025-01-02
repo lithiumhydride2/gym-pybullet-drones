@@ -461,8 +461,8 @@ class SampleNet(nn.Module):
         self.embedding_dim = embedding_dim
         self.input_dim = 1 + IPPArg.NUM_DRONE * 3  # (yaw, belief, dist)
         self.sample_embedding = nn.Sequential(
-            nn.Linear(self.input_dim, self.embedding_dim), nn.ReLU(),
-            nn.Linear(self.embedding_dim, self.embedding_dim), nn.ReLU())
+            nn.Linear(self.input_dim, self.embedding_dim), nn.LeakyReLU(),
+            nn.Linear(self.embedding_dim, self.embedding_dim), nn.LeakyReLU())
         self.actor = nn.Sequential(
             nn.Linear(self.embedding_dim, IPPArg.sample_num),
             nn.Softmax(dim=-1))
