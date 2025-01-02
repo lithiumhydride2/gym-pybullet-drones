@@ -29,9 +29,7 @@ class IPPFeaturesExtractor(BaseFeaturesExtractor):
                              dim=2,
                              index=curr_index)  #(bach,feature)
         input = input[:, -1, :, :].reshape(-1, 12)
-        return self.sample_net(
-            torch.cat((observation["curr_index"].reshape(-1, 1), input),
-                      dim=1))
+        return self.sample_net(input)
         # stable_baselines3 自动转换observation并添加 batch dim
 
         return self.attention_net(node_inputs=observation["node_inputs"],

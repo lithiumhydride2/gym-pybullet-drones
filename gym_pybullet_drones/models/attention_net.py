@@ -459,7 +459,7 @@ class SampleNet(nn.Module):
     def __init__(self, embedding_dim):
         super(SampleNet, self).__init__()
         self.embedding_dim = embedding_dim
-        self.input_dim = 1 + IPPArg.NUM_DRONE * 3  # (yaw, belief, dist)
+        self.input_dim = IPPArg.NUM_DRONE * 3  # (yaw, belief, dist)
         self.sample_embedding = nn.Sequential(
             nn.Linear(self.input_dim, self.embedding_dim), nn.LeakyReLU(),
             nn.Linear(self.embedding_dim, self.embedding_dim), nn.LeakyReLU())
