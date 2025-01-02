@@ -68,6 +68,10 @@ class FlockingAviaryIPP(FlockingAviary):
                 plt.pause(1e-10)
 
     def step(self, action):
+        action = self.IPPEnvs[
+            self.control_by_RL_ID[0]].curr_node_index + action - 1
+        action = IPPArg.sample_num - 1 if action == -1 else action
+        action = 0 if action == IPPArg.sample_num else action
         # 使用当前 obs 后处理 action
         self.IPPEnvs[self.control_by_RL_ID[0]].step(action)
 
@@ -118,6 +122,7 @@ class FlockingAviaryIPP(FlockingAviary):
         '''
         IPP_YAW 模式下，选取动作方式为从当前 node_coords 的邻居中选取下一个节点
         '''
+        return Discrete(3)  # yaw 增大，保持，减小
         if self.ACT_TYPE == ActionType.IPP_YAW:
             return Discrete(IPPArg.sample_num)
 
@@ -132,21 +137,21 @@ class FlockingAviaryIPP(FlockingAviary):
                            IPPArg.sample_num,
                            self.NUM_DRONES * 3),  # 3: (yaw_coord, belief)
                     dtype=np.float32),
-                "dt_pool_inputs":
-                Box(low=-np.inf,
-                    high=0.,
-                    shape=(IPPArg.history_size // IPPArg.history_stride, 1),
-                    dtype=np.float32),
+                # "dt_pool_inputs":
+                # Box(low=-np.inf,
+                #     high=0.,
+                #     shape=(IPPArg.history_size // IPPArg.history_stride, 1),
+                #     dtype=np.float32),
                 "curr_index":
                 Box(low=0,
                     high=IPPArg.sample_num - 1,
                     shape=(1, 1),
                     dtype=np.int64),
-                "dist_inputs":
-                Box(low=0.,
-                    high=1.,
-                    shape=(IPPArg.sample_num, 1),
-                    dtype=np.float32)
+                # "dist_inputs":
+                # Box(low=0.,
+                #     high=1.,
+                #     shape=(IPPArg.sample_num, 1),
+                #     dtype=np.float32)
             })
 
     def _computeObs(self):
@@ -180,7 +185,11 @@ class FlockingAviaryIPP(FlockingAviary):
         # cache for action subprocess
         self.cache["obs"] = obs
         self.plot_online()
-        return obs[self.control_by_RL_ID[0]]
+        ret = obs[self.control_by_RL_ID[0]]
+        return {
+            "node_inputs": ret["node_inputs"],
+            "curr_index": ret["curr_index"]
+        }
 
     def _computeReward(self):
         reward = super()._computeReward()

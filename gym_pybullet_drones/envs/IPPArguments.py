@@ -7,8 +7,8 @@ class IPPArguments:
     def __init__(self):
         if __debug__:
             self.N_ENVS = 1
-            self.DEFAULT_GUI = False
-            self.DEFAULT_USER_DEBUG_GUI = False
+            self.DEFAULT_GUI = True
+            self.DEFAULT_USER_DEBUG_GUI = True
             self.VEC_ENV_CLS = SubprocVecEnv
         else:
             self.N_ENVS = 16
@@ -20,7 +20,7 @@ class IPPArguments:
         self.RANDOM_POINT = False  # 是否随机生成目标点，当前参数为 circle_7
         self.NUM_DRONE = 4
         #### graph
-        self.sample_num = 8  # 应当为一个偶数
+        self.sample_num = 12  # 应当为一个偶数
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
         #### terminated
         self.MAX_EPISODE_LEN = 300  # max length of an episode / s
