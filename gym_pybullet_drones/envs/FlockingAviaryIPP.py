@@ -196,7 +196,7 @@ class FlockingAviaryIPP(FlockingAviary):
         for nth in self.control_by_RL_ID:
             smooth_reward = circle_angle_diff(
                 self.IPPEnvs[nth].route_coord[-1],
-                self.IPPEnvs[nth].route_coord[-2]) * 1e-2
+                self.IPPEnvs[nth].route_coord[-2]) * 1e-1
             reward -= smooth_reward
         return float(reward)
 

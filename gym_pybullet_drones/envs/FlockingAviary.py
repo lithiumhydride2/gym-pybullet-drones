@@ -762,16 +762,17 @@ class FlockingAviary(BaseRLAviary):
 
             def compute_reward(nth):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()
-                high_info_idx = self.decisions[
-                    nth].GP_ground_truth.get_high_info_indx(ground_truth)
-                ## Unc update reward, 最大值为1
-                _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
-                    self.curr_time, high_info_idx, return_all=True)
-                unc_list = np.asarray(unc_list)
-                unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
-                unc_update = self.cache['unc'][nth] - unc_list
-                reward = np.sum(unc_update[unc_update > .0])
-                self.cache['unc'][nth] = unc_list
+                # high_info_idx = self.decisions[
+                #     nth].GP_ground_truth.get_high_info_indx(ground_truth)
+                # ## Unc update reward, 最大值为1
+                # _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
+                #     self.curr_time, high_info_idx, return_all=True)
+                # unc_list = np.asarray(unc_list)
+                # unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
+                # unc_update = self.cache['unc'][nth] - unc_list
+                # reward = np.sum(unc_update[unc_update > .0])
+                # self.cache['unc'][nth] = unc_list
+                reward = 0.
 
                 ## Unc reward 都是累计 reward, 需要即使奖励
                 preds = self.decisions[nth].cache["preds"]
@@ -779,8 +780,10 @@ class FlockingAviary(BaseRLAviary):
                 ## TODO: 这里是测试训练使用的另一个阈值
                 ## TODO: 这里使用更加稠密断店奖励
                 for pred in preds:
-                    if np.max(pred) > 0.6:
+                    if np.max(pred) > 0.9:
                         observed_target += 1
+                    if np.max(pred) < 0.1:
+                        observed_target -= .5
                 reward += observed_target
                 ## 平滑性 reward
                 return reward
