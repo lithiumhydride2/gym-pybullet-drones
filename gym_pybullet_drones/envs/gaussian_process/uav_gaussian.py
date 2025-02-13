@@ -118,11 +118,12 @@ class UAVGaussian():
          - node_coords: yaw角形式是
          ---------------
         ### returns :
-        - all_std
+        - stds, preds, node_feature
          ---------------
         """
         # TODO(lih): gaussian process part
         all_std = None
+        all_pred = None
         ### Ground Truth Part
         self.GP_ground_truth.step(other_pose)
 
@@ -147,7 +148,7 @@ class UAVGaussian():
         node_feature = self.get_node_feature()
         self.cache["all_std"] = all_std
         self.cache["all_pred"] = all_pred
-        return all_std, node_feature
+        return self.cache["stds"], self.cache["preds"], node_feature
 
     def get_yaw_feature(self, gp_mean: np.ndarray):
         '''
@@ -171,7 +172,7 @@ class UAVGaussian():
         从 gp_preds 中获取关于 node_index 的图特征 
         Args:
             gp_preds: GP 对于所有目标的 pred
-            node_indx: 当前在图中所处的位置
+            node_index: 当前在图中所处的位置（如果为 None，则不使用 fov_masks）
         '''
         # 图中的节点为， 所有潜在的邻近目标
         # 图中的边为， 当前 node_index 对所有邻居的连接关系
@@ -181,15 +182,20 @@ class UAVGaussian():
         yaw_feature_of_target = np.zeros((num_target, 2))
         belief_feature = np.zeros((num_target, 1))
         for target_id, gp_pred in enumerate(gp_preds):
-            if np.max(gp_pred[self.fov_masks[node_index].astype(
-                    bool)]) > IPPArg.EXIST_THRESHOLD:
+            if node_index is None:
+                condition = np.max(gp_pred) > IPPArg.EXIST_THRESHOLD
+            else:
+                condition = np.max(gp_pred[self.fov_masks[node_index].astype(
+                    bool)]) > IPPArg.EXIST_THRESHOLD
+            if condition:
                 max_row, max_col = np.unravel_index(gp_pred.argmax(),
                                                     (grid_size, grid_size))
                 yaw = np.asarray(
                     [max_row - grid_size / 2, max_col - grid_size / 2])
                 yaw_feature_of_target[target_id] = yaw / np.linalg.norm(yaw)
                 belief_feature[target_id] = np.max(
-                    gp_pred[self.fov_masks[node_index].astype(bool)])
+                    gp_pred[self.fov_masks[node_index].astype(
+                        bool)]) if node_index is not None else np.max(gp_pred)
         return np.hstack((yaw_feature_of_target, belief_feature))
 
     def update_node_feature(self):
@@ -284,20 +290,35 @@ class UAVGaussian():
         self.ego_heading = ego_heading
 
         # GP_step
-        all_std, node_feature = self._gp_step(detection_map=detection_map,
-                                              other_pose=relative_pose,
-                                              ego_heading=ego_heading,
-                                              time=curr_time)
+        _, all_pred, node_feature = self._gp_step(detection_map=detection_map,
+                                                  other_pose=relative_pose,
+                                                  ego_heading=ego_heading,
+                                                  time=curr_time)
         # node_inputs 为 node_coords 与 node_feature 的结合
         node_inputs = node_feature
         history_pool_inputs, dt_pool_inputs = self.avg_pool_node_inputs(
             node_inputs)
 
         self.last_time = curr_time
+        relative_obs = self.get_yaw_feature_of_target(all_pred, None)
+        relative_obs = self.avg_pool_relative_obs(relative_obs)
         return {
+            "relative_obs": relative_obs,
             "node_inputs": history_pool_inputs,
             "dt_pool_inputs": dt_pool_inputs
         }
+
+    def avg_pool_relative_obs(self, relative_obs):
+        relative_obs = torch.Tensor(relative_obs).unsqueeze(0)
+        if not hasattr(self, "relative_obs_history"):
+            self.relative_obs_history = relative_obs.repeat(
+                IPPArg.history_size, 1, 1)
+        else:
+            self.relative_obs_history = torch.cat(
+                (self.relative_obs_history[1:], relative_obs.clone()), dim=0)
+        history_pool_relative_obs = self.avgpool(
+            self.relative_obs_history.permute(1, 2, 0)).permute(2, 0, 1)
+        return history_pool_relative_obs.numpy()
 
     def avg_pool_node_inputs(self, node_inputs):
         node_inputs = torch.Tensor(node_inputs).unsqueeze(0)

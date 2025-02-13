@@ -33,7 +33,7 @@ class FlockingAviaryIPP(FlockingAviary):
                  obs=ObservationType.GAUSSIAN,
                  act=ActionType.YAW,
                  random_point=True):
-        assert act == ActionType.IPP_YAW
+
         super().__init__(drone_model, num_drones, control_by_RL_mask,
                          neighbourhood_radius, initial_xyzs, initial_rpys,
                          physics, pyb_freq, flocking_freq_hz, decision_freq_hz,
@@ -68,6 +68,8 @@ class FlockingAviaryIPP(FlockingAviary):
                 plt.pause(1e-10)
 
     def step(self, action):
+
+        assert self.ACT_TYPE in [ActionType.IPP_YAW, ActionType.YAW_DIFF]
         action = self.IPPEnvs[
             self.control_by_RL_ID[0]].curr_node_index + action - 1
         action = IPPArg.sample_num - 1 if action == -1 else action
@@ -122,11 +124,24 @@ class FlockingAviaryIPP(FlockingAviary):
         '''
         IPP_YAW 模式下，选取动作方式为从当前 node_coords 的邻居中选取下一个节点
         '''
-        return Discrete(3)  # yaw 增大，保持，减小
+
+        if self.ACT_TYPE == ActionType.YAW_DIFF:
+            return Discrete(3)  # yaw 增大，保持，减小
         if self.ACT_TYPE == ActionType.IPP_YAW:
             return Discrete(IPPArg.sample_num)
 
     def _observationSpace(self):
+        if self.OBS_TYPE == ObservationType.SIMPLE:
+            return Dict({
+                "relative_obs":
+                Box(low=-1.,
+                    high=1.,
+                    shape=(IPPArg.history_size // IPPArg.history_stride,
+                           self.NUM_DRONES - 1, 3),
+                    dtype=np.float32),  # 3: (cos,sin,belief)
+                "curr_pos":
+                Box(low=-1., high=1., shape=(1, 2), dtype=np.float32),
+            })
         if self.OBS_TYPE == ObservationType.IPP:
             return Dict({
                 "node_inputs":
@@ -158,9 +173,35 @@ class FlockingAviaryIPP(FlockingAviary):
         '''
         Return the current observation of the environment.
         '''
-        # 获得增广图形式的观测
-        ### 这里取消 step 与 decision 的严格对其
+        ### 这里取消 step 与 decision 的严格对齐
         # assert self.step_counter % self.DECISION_PER_PYB == 0
+        if self.OBS_TYPE == ObservationType.SIMPLE:
+            obs = {}
+            adjacency_Mat = self._computeAdjacencyMatFOV()
+            relative_position = self._relative_position
+            for nth in self.control_by_RL_ID:
+                #TODO 获得观测时，需要更新 IPP_env
+                # mask 用于获取真实相对位置
+                other_pose_mask = np.ones((self.NUM_DRONES, )).astype(bool)
+                other_pose_mask[nth] = False
+                guassian_obs = self.decisions[nth].step(
+                    curr_time=self.curr_time,
+                    detection_map=self._computePositionEstimation(
+                        adjacency_Mat, nth),
+                    ego_heading=circle_to_yaw(
+                        self._computeHeading(nth)[:2].reshape(-1, 2)),
+                    relative_pose=relative_position[nth][other_pose_mask])
+                obs[nth] = {
+                    "relative_obs":
+                    guassian_obs["relative_obs"],
+                    "curr_pos":
+                    self.IPPEnvs[nth].node_coords[
+                        self.IPPEnvs[nth].curr_node_index]
+                }
+            self.plot_online()
+            ret = obs[self.control_by_RL_ID[0]]
+            return ret
+
         if self.OBS_TYPE == ObservationType.IPP:
             # 按照固定的时间频率，获得包含 node_feature 的观测
             obs = {}
@@ -172,7 +213,6 @@ class FlockingAviaryIPP(FlockingAviary):
                 # mask 用于获取真实相对位置
                 other_pose_mask = np.ones((self.NUM_DRONES, )).astype(bool)
                 other_pose_mask[nth] = False
-
                 gaussian_obs = self.decisions[nth].step(
                     curr_time=self.curr_time,
                     detection_map=self._computePositionEstimation(
@@ -182,14 +222,14 @@ class FlockingAviaryIPP(FlockingAviary):
                     relative_pose=relative_position[nth][other_pose_mask])
                 # 合并两个 obs
                 obs[nth] = gaussian_obs | self.IPPEnvs[nth].Obs
-        # cache for action subprocess
-        self.cache["obs"] = obs
-        self.plot_online()
-        ret = obs[self.control_by_RL_ID[0]]
-        return {
-            "node_inputs": ret["node_inputs"],
-            "curr_index": ret["curr_index"]
-        }
+            # cache for action subprocess
+            self.cache["obs"] = obs
+            self.plot_online()
+            ret = obs[self.control_by_RL_ID[0]]
+            return {
+                "node_inputs": ret["node_inputs"],
+                "curr_index": ret["curr_index"]
+            }
 
     def _computeReward(self):
         reward = super()._computeReward()
@@ -243,7 +283,7 @@ class FlockingAviaryIPP(FlockingAviary):
             target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
                                           dtype=np.float32)
             target_yaws_circle[self.control_by_RL_mask] = action
-        elif self.ACT_TYPE == ActionType.IPP_YAW:
+        elif self.ACT_TYPE in [ActionType.IPP_YAW, ActionType.YAW_DIFF]:
             target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
                                           dtype=np.float32)
             for id in self.control_by_RL_ID:

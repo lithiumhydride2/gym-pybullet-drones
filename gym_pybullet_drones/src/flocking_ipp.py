@@ -44,8 +44,8 @@ DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
 DEFAULT_NUM_DRONE = IPPArg.NUM_DRONE
 
-DEFAULT_OBS_TYPE = ObservationType.IPP
-DEFAULT_ACT_TYPE = ActionType.IPP_YAW
+DEFAULT_OBS_TYPE = ObservationType.SIMPLE
+DEFAULT_ACT_TYPE = ActionType.YAW_DIFF
 DEFAULT_FOV_CONFIG = FOVType.SINGLE
 
 DEFAULT_FLOCKING_FREQ = IPPArg.FLOCKIN_FREQ
@@ -123,14 +123,13 @@ def learn(drone=DEFAULT_DRONE,
     print('[INFO] Observation space:', train_env.observation_space)
 
     ### train the model
-    # USE USER POLICY
-
-    model = PPO(policy=IPPActorCriticPolicy,
+    # use default policy
+    model = PPO(policy="MultiInputPolicy",
                 env=train_env,
                 verbose=1,
                 learning_rate=3e-4,
                 tensorboard_log=filename + '/tb/',
-                batch_size=256,
+                batch_size=64,
                 n_steps=2048)  # n_steps 为交互 step 后， 更新 policy
     if continue_train is not None:
         model.load(continue_train, env=train_env)
@@ -150,6 +149,10 @@ def learn(drone=DEFAULT_DRONE,
                                                '/checkpoints/',
                                                save_replay_buffer=False)
     callback = CallbackList([eval_call_back, check_point_call_back])
+    model.learn(total_timesteps=1e4,
+                callback=callback,
+                log_interval=1e2,
+                progress_bar=True)
     try:
         model.learn(total_timesteps=int(1e6),
                     callback=callback,

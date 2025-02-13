@@ -758,7 +758,10 @@ class FlockingAviary(BaseRLAviary):
             Dummy value.
 
         """
-        if self.OBS_TYPE in [ObservationType.GAUSSIAN, ObservationType.IPP]:
+        if self.OBS_TYPE in [
+                ObservationType.GAUSSIAN, ObservationType.IPP,
+                ObservationType.SIMPLE
+        ]:
 
             def compute_reward(nth):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()
@@ -777,15 +780,13 @@ class FlockingAviary(BaseRLAviary):
                 ## Unc reward 都是累计 reward, 需要即使奖励
                 preds = self.decisions[nth].cache["preds"]
                 observed_target = 0
-                ## TODO: 这里是测试训练使用的另一个阈值
-                ## TODO: 这里使用更加稠密断店奖励
+
                 for pred in preds:
-                    if np.max(pred) > 0.9:
+                    if np.max(pred) > 0.6:
                         observed_target += 1
-                    if np.max(pred) < 0.1:
-                        observed_target -= .5
                 reward += observed_target
-                ## 平滑性 reward
+                # 以潜在目标数量进行归一化
+                reward = reward / (self.NUM_DRONES - 1) if reward > 0 else 0.
                 return reward
 
             reward = np.zeros((self.NUM_DRONES, ))

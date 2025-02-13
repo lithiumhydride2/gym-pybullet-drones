@@ -2,15 +2,17 @@ import numpy as np
 import torch
 from stable_baselines3.ppo import PPO
 from stable_baselines3.common.env_checker import check_env
+import time
+from gym_pybullet_drones.utils.Logger import Logger
 from flocking_ipp import *
 
 # override
-DEFAULT_GUI = True
-DEFAULT_USER_DEBUG_GUI = True
+DEFAULT_GUI = False
+DEFAULT_USER_DEBUG_GUI = False
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-12.30.2024_22.11.05"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-01.02.2025_17.46.15"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
@@ -30,8 +32,8 @@ def main():
                       flocking_freq_hz=DEFAULT_FLOCKING_FREQ,
                       decision_freq_hz=DEFAULT_DECISION_FREQ,
                       ctrl_freq=DEFAULT_CONTROL_FREQ_HZ,
-                      user_debug_gui=True,
-                      gui=True,
+                      user_debug_gui=DEFAULT_USER_DEBUG_GUI,
+                      gui=DEFAULT_GUI,
                       default_flight_height=DEFAULT_FLIGHT_HEIGHT,
                       fov_config=DEFAULT_FOV_CONFIG,
                       obs=DEFAULT_OBS_TYPE,
@@ -49,7 +51,7 @@ def main():
     TEST_DURATION = 100
     for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
 
-        action, _states = model.predict(obs, deterministic=False)
+        action, _states = model.predict(obs, deterministic=True)
         print("Action is : {}".format(action))
         obs, reward, terminated, truncated, info = test_env.step(action)
 
