@@ -149,19 +149,15 @@ def learn(drone=DEFAULT_DRONE,
                                                '/checkpoints/',
                                                save_replay_buffer=False)
     callback = CallbackList([eval_call_back, check_point_call_back])
-    model.learn(total_timesteps=1e4,
+    # try:
+    model.learn(total_timesteps=int(1e6),
                 callback=callback,
-                log_interval=1e2,
-                progress_bar=True)
-    try:
-        model.learn(total_timesteps=int(1e6),
-                    callback=callback,
-                    log_interval=100,
-                    progress_bar=True)  # TODO: 改为 True
-    except Exception as e:
-        print(" 中断，保存模型 ")
-        print(e)
-        model.save(filename + '/model_interruupted.zip')
+                log_interval=100,
+                progress_bar=True)  # TODO: 改为 True
+    # # except Exception as e:
+    #     print(" 中断，保存模型 ")
+    #     print(e)
+    #     model.save(filename + '/model_interruupted.zip')
 
     model.save(filename + '/final_model.zip')
     print(filename)

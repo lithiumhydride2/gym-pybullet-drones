@@ -196,7 +196,7 @@ class FlockingAviaryIPP(FlockingAviary):
                     guassian_obs["relative_obs"],
                     "curr_pos":
                     self.IPPEnvs[nth].node_coords[
-                        self.IPPEnvs[nth].curr_node_index]
+                        self.IPPEnvs[nth].curr_node_index].reshape(1, 2)
                 }
             self.plot_online()
             ret = obs[self.control_by_RL_ID[0]]
