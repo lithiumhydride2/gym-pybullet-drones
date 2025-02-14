@@ -75,6 +75,9 @@ tensorboard --logdir=/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/s
 - [ ] 这里考虑使用 显示的图神经网络 对无人机获得 action 进行建模
 
 - [ ] 下一步考虑 将每一个 node_coords 的观测情况的 laplace 矩阵的特征值作为 feature 输入
+
+# 0214 重新考虑
+- [ ] 现在使用简单模型，能够收敛，尝试先提高任务的难度，然后再提升模型的复杂程度
 # Install
 - 需要自定义 pythonpath 避免 gym 使用已经注册并移动至 sitepackages 目录的环境：
 ```bash

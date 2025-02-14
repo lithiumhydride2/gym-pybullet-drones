@@ -114,10 +114,23 @@ class FlockingAviaryIPP(FlockingAviary):
 
         for nth in self.control_by_RL_ID:
             # 这里的 yaw_start 由于物理引擎后更新，使用 INIT_RYPS 初始化
-            self.IPPEnvs[nth].reset(
-                yaw_start=yaw_to_circle(self.INIT_RPYS[nth][-1])[:2])
+            if self.IPPEnvs.get(nth, None) is not None:
+                self.IPPEnvs[nth].reset(
+                    yaw_start=yaw_to_circle(self.INIT_RPYS[nth][-1])[:2])
+            else:
+                self.IPPEnvs[nth] = IPPenv(yaw_start=yaw_to_circle(
+                    self.INIT_RPYS[nth][-1])[:2],
+                                           act_type=self.ACT_TYPE)
             # 使用 IPPEnvs 的采样初始化 self.decision
-            self.decisions[nth].reset(nth_drone=nth)
+            if self.decisions.get(nth, None) is not None:
+                self.decisions[nth].reset(nth_drone=nth)
+            else:
+                self.decisions[nth] = decision(
+                    fov_range=self.fov_range,
+                    nth_drone=nth,
+                    num_drone=self.NUM_DRONES,
+                    planner=None,
+                    node_coords=self.IPPEnvs[nth].node_coords)
         return super().reset(seed, options)
 
     def _actionSpace(self):
