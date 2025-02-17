@@ -351,10 +351,15 @@ class FlockingAviary(BaseRLAviary):
             else:
                 reynolds_commands.append(
                     self.reynolds.command(
-                        relative_position[i][super_power_adj_mat[i].astype(
-                            bool)], relative_velocities[i][
-                                super_power_adj_mat[i].astype(bool)]))
-                # 如果不需要超能力 relative_position[i][self.adjacencyMat[i].astype(bool)]
+                        relative_position[i][adjacencyMat[i].astype(bool)]))
+
+                # 这里控制普通无人机也要依照自主感知来进行飞行方向决策
+                # reynolds_commands.append(
+                #     self.reynolds.command(
+                #         relative_position[i][super_power_adj_mat[i].astype(
+                #             bool)], relative_velocities[i][
+                #                 super_power_adj_mat[i].astype(bool)]))
+
         reynolds_commands = np.array(reynolds_commands)
 
         if self.cache.get("reynolds_command", None) is None:
@@ -782,7 +787,7 @@ class FlockingAviary(BaseRLAviary):
                 observed_target = 0
 
                 for pred in preds:
-                    if np.max(pred) > 0.6:
+                    if np.max(pred) > IPPArg.EXIST_THRESHOLD:
                         observed_target += 1
                 reward += observed_target
                 # 以潜在目标数量进行归一化
