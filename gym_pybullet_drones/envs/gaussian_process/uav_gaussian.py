@@ -237,7 +237,7 @@ class UAVGaussian():
         Args:
             curr_index: 当前所在节点位置的索引
         Return:
-            node_feature: in shape (graph_size, target, feature(yaw,belief)) 
+            node_feature: in shape (graph_size, 2+ num_target * 3) 
         '''
         # node_feature [num_target, num_feature]
         # edge_index [2,num_edges] 源节点索引->目标节点索引
@@ -247,17 +247,19 @@ class UAVGaussian():
         ### node 由 ego 与所有潜在目标构成, feature
         node_features = []
         for index in range(self.node_coords.shape[0]):
-            curr_node_feature = np.hstack(
-                (self.node_coords[index].reshape(1, -1), np.asarray([[1]])))
+            curr_node_feature = self.node_coords[index].reshape(
+                1, -1)  # pos shape (1,2)
             target_node_feature = self.get_yaw_feature_of_target(
-                self.cache["preds"], index)
+                self.cache["preds"],
+                index).reshape(1,
+                               -1)  # shape (1,num_target *  3 (pos, belief))
             node_features.append(
-                np.vstack((curr_node_feature, target_node_feature)))
+                np.hstack((curr_node_feature, target_node_feature)))
 
         node_features = np.asarray(node_features).reshape(
             self.node_coords.shape[0],
             -1)  # (graph_size, num_drone * feature(yaw,belief))
-        return node_features
+        return node_features  #(graph_size, 2 + num_target * 3)
 
     def __get_fov_mask(self, fov_vector):
         '''
@@ -284,7 +286,8 @@ class UAVGaussian():
             node_coords: 节点坐标，用于评估节点特征
         
         Return:
-            node_feature
+            node_inputs: (history_size,graph_size, 2 + 3 * num_target)
+            dt_pool_inputs: (history_size, 1)
         """
         self.curr_time = curr_time
         self.ego_heading = ego_heading
@@ -295,9 +298,8 @@ class UAVGaussian():
                                                   ego_heading=ego_heading,
                                                   time=curr_time)
         # node_inputs 为 node_coords 与 node_feature 的结合
-        node_inputs = node_feature
         history_pool_inputs, dt_pool_inputs = self.avg_pool_node_inputs(
-            node_inputs)
+            node_feature)
 
         self.last_time = curr_time
         relative_obs = self.get_yaw_feature_of_target(all_pred, None)
@@ -321,6 +323,9 @@ class UAVGaussian():
         return history_pool_relative_obs.numpy()
 
     def avg_pool_node_inputs(self, node_inputs):
+        '''
+        收集对于 node_inputs 的历史信息, 并计算其历史时间的特征
+        '''
         node_inputs = torch.Tensor(node_inputs).unsqueeze(0)
         # env.reset()时， 会重新 init UAVGaussian, 因此通过判断是否有 node_inputs_history
         if not hasattr(self, "node_inputs_history"):

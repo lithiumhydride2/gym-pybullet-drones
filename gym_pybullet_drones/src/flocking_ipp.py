@@ -44,8 +44,8 @@ DEFAULT_FLIGHT_HEIGHT = 2.0
 DEFAULT_COLAB = False
 DEFAULT_NUM_DRONE = IPPArg.NUM_DRONE
 
-DEFAULT_OBS_TYPE = ObservationType.SIMPLE
-DEFAULT_ACT_TYPE = ActionType.YAW_DIFF
+DEFAULT_OBS_TYPE = ObservationType.IPP
+DEFAULT_ACT_TYPE = ActionType.IPP_YAW
 DEFAULT_FOV_CONFIG = FOVType.SINGLE
 
 DEFAULT_FLOCKING_FREQ = IPPArg.FLOCKIN_FREQ
@@ -124,7 +124,7 @@ def learn(drone=DEFAULT_DRONE,
 
     ### train the model
     # use default policy
-    model = PPO(policy="MultiInputPolicy",
+    model = PPO(policy=IPPActorCriticPolicy,
                 env=train_env,
                 verbose=1,
                 learning_rate=3e-4,

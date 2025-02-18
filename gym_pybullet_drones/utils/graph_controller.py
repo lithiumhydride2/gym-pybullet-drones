@@ -11,13 +11,19 @@ class GraphController:
     Graph Controller
     """
 
-    def __init__(self, start, act_type: ActionType, random_sample=True):
+    def __init__(self,
+                 start,
+                 k_size,
+                 act_type: ActionType,
+                 random_sample=True):
         '''
         Args:
             start: 在图中的起点
             act: type of act
             random_sample: 是否随机采样，否则在 range 内均匀采样
         '''
+        self.graph = Graph()
+        self.k_size = k_size
         self.act_type = act_type
         if self.act_type in [
                 ActionType.YAW, ActionType.YAW_DIFF, ActionType.YAW_RATE,
@@ -67,7 +73,28 @@ class GraphController:
                 self.distance_matrix[i, j] = circle_angle_diff(
                     self.node_coords[i], self.node_coords[j])
 
-        return self.node_coords, self.distance_matrix
+        ## 计算 knn 最近邻
+        self.findNearestNeighbor(k=self.k_size)
+        return self.node_coords, self.distance_matrix, self.graph
+
+    def findNearestNeighbor(self, k):
+        '''
+        找到k个最近邻，并计算距离
+        '''
+        self.graph = Graph()
+        X = self.node_coords
+        knn = NearestNeighbors(n_neighbors=k, metric=circle_angle_diff)
+        knn.fit(X)
+        distances, indices = knn.kneighbors(X)
+
+        for i, p in enumerate(X):
+            # Ignoring nearest neighbour - nearest neighbour is the point itself
+            for j, neighbour in enumerate(X[indices[i][:]]):
+                a = str(self.findNodeIndex(p))
+                b = str(self.findNodeIndex(neighbour))
+                self.graph.add_node(a)
+                self.graph.add_edge(a, b, distances[i, j])
+        return self.graph
 
     def findNodeIndex(self, p):
         return np.where(np.linalg.norm(self.node_coords -

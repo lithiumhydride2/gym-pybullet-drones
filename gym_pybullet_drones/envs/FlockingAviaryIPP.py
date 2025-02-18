@@ -70,10 +70,17 @@ class FlockingAviaryIPP(FlockingAviary):
     def step(self, action):
 
         assert self.ACT_TYPE in [ActionType.IPP_YAW, ActionType.YAW_DIFF]
-        action = self.IPPEnvs[
-            self.control_by_RL_ID[0]].curr_node_index + action - 1
-        action = IPPArg.sample_num - 1 if action == -1 else action
-        action = 0 if action == IPPArg.sample_num else action
+        ### yaw_diff 模式下，action 为相对于当前节点的偏移
+        if self.ACT_TYPE == ActionType.YAW_DIFF:
+            action = self.IPPEnvs[
+                self.control_by_RL_ID[0]].curr_node_index + action - 1
+            action = IPPArg.sample_num - 1 if action == -1 else action
+            action = 0 if action == IPPArg.sample_num else action
+        elif self.ACT_TYPE == ActionType.IPP_YAW:
+            knn_edge_inputs = self.IPPEnvs[
+                self.control_by_RL_ID[0]].knn_edge_inputs
+            curr_index = self.IPPEnvs[self.control_by_RL_ID[0]].curr_node_index
+            action = knn_edge_inputs[curr_index.item()][action]
         # 使用当前 obs 后处理 action
         self.IPPEnvs[self.control_by_RL_ID[0]].step(action)
 
@@ -141,7 +148,7 @@ class FlockingAviaryIPP(FlockingAviary):
         if self.ACT_TYPE == ActionType.YAW_DIFF:
             return Discrete(3)  # yaw 增大，保持，减小
         if self.ACT_TYPE == ActionType.IPP_YAW:
-            return Discrete(IPPArg.sample_num)
+            return Discrete(IPPArg.k_size)  # 从邻居中选取一个节点
 
     def _observationSpace(self):
         if self.OBS_TYPE == ObservationType.SIMPLE:
@@ -161,25 +168,31 @@ class FlockingAviaryIPP(FlockingAviary):
                 Box(
                     low=0.,
                     high=1.,
-                    shape=(IPPArg.history_size // IPPArg.history_stride,
-                           IPPArg.sample_num,
-                           self.NUM_DRONES * 3),  # 3: (yaw_coord, belief)
+                    shape=(
+                        IPPArg.history_size // IPPArg.history_stride,
+                        IPPArg.sample_num, 2 +
+                        (self.NUM_DRONES - 1) * 3),  # 3: (yaw_coord, belief)
                     dtype=np.float32),
-                # "dt_pool_inputs":
-                # Box(low=-np.inf,
-                #     high=0.,
-                #     shape=(IPPArg.history_size // IPPArg.history_stride, 1),
-                #     dtype=np.float32),
+                "dt_pool_inputs":
+                Box(low=-np.inf,
+                    high=0.,
+                    shape=(IPPArg.history_size // IPPArg.history_stride, 1),
+                    dtype=np.float32),
                 "curr_index":
                 Box(low=0,
                     high=IPPArg.sample_num - 1,
                     shape=(1, 1),
                     dtype=np.int64),
-                # "dist_inputs":
-                # Box(low=0.,
-                #     high=1.,
-                #     shape=(IPPArg.sample_num, 1),
-                #     dtype=np.float32)
+                "dist_inputs":
+                Box(low=0.,
+                    high=1.,
+                    shape=(IPPArg.sample_num, 1),
+                    dtype=np.float32),
+                "edge_inputs":
+                Box(low=0,
+                    high=IPPArg.sample_num - 1,
+                    shape=(IPPArg.k_size, 1),
+                    dtype=np.int64)
             })
 
     def _computeObs(self):
@@ -222,7 +235,6 @@ class FlockingAviaryIPP(FlockingAviary):
             relative_position = self._relative_position
             for nth in self.control_by_RL_ID:
                 #TODO 获得观测时，需要更新 IPP_env
-
                 # mask 用于获取真实相对位置
                 other_pose_mask = np.ones((self.NUM_DRONES, )).astype(bool)
                 other_pose_mask[nth] = False
@@ -234,15 +246,18 @@ class FlockingAviaryIPP(FlockingAviary):
                         self._computeHeading(nth)[:2].reshape(-1, 2)),
                     relative_pose=relative_position[nth][other_pose_mask])
                 # 合并两个 obs
-                obs[nth] = gaussian_obs | self.IPPEnvs[nth].Obs
+                graph_obs = self.IPPEnvs[nth].Obs
+                obs[nth] = {
+                    "node_inputs": gaussian_obs["node_inputs"],
+                    "dt_pool_inputs": gaussian_obs["dt_pool_inputs"],
+                    "dist_inputs": graph_obs["dist_inputs"],
+                    "curr_index": graph_obs["curr_index"],
+                    "edge_inputs": graph_obs["edge_inputs"]
+                }
             # cache for action subprocess
             self.cache["obs"] = obs
             self.plot_online()
-            ret = obs[self.control_by_RL_ID[0]]
-            return {
-                "node_inputs": ret["node_inputs"],
-                "curr_index": ret["curr_index"]
-            }
+            return obs[self.control_by_RL_ID[0]]
 
     def _computeReward(self):
         reward = super()._computeReward()
@@ -311,13 +326,21 @@ class IPPenv:
     def __init__(self, yaw_start, act_type):
 
         self.graph_control = GraphController(start=yaw_start,
+                                             k_size=IPPArg.k_size,
                                              act_type=act_type,
                                              random_sample=False)
         #生成图
-        self.node_coords, self.distance_matrix = self.graph_control.gen_graph(
+        self.node_coords, self.distance_matrix, self.knn_graph = self.graph_control.gen_graph(
             curr_coord=yaw_start,
             samp_num=IPPArg.sample_num,
             gen_range=IPPArg.gen_range)
+
+        # 生成与当前节点相连节点的 node_coord
+        self.knn_edge_inputs = []
+        for node in self.knn_graph.edges.values():
+            node_edges = list(map(int, node))
+            self.knn_edge_inputs.append(node_edges)
+        self.knn_edge_inputs = np.asarray(self.knn_edge_inputs)
 
         self.curr_node_index = self.graph_control.findNodeIndex(
             yaw_start)  # 当前 node index
@@ -333,7 +356,12 @@ class IPPenv:
         ### curr_index
         curr_index = np.asarray(self.curr_node_index).reshape(-1, 1)
         dist_inputs = self.calc_distance_of_nodes(curr_index)
-        return {"curr_index": curr_index, "dist_inputs": dist_inputs}
+        edge_inputs = self.knn_edge_inputs[curr_index.item()].reshape(-1, 1)
+        return {
+            "curr_index": curr_index,
+            "dist_inputs": dist_inputs,
+            "edge_inputs": edge_inputs
+        }
 
     def calc_distance_of_nodes(self, current_index):
         '''
