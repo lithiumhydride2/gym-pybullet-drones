@@ -21,11 +21,11 @@ class IPPArguments:
             self.DEFAULT_USER_DEBUG_GUI = False
             self.VEC_ENV_CLS = DummyVecEnv
 
-        self.CONTROL_BY_RL_MASK = "random"  # "random" 为随机生成,其余为固定
-        self.RANDOM_POINT = True  # 是否随机生成目标点，当前参数为 circle_7
+        self.CONTROL_BY_RL_MASK = None  # "random" 为随机生成,其余为固定
+        self.RANDOM_POINT = False  # 是否随机生成目标点，当前参数为 circle_7
         self.NUM_DRONE = 6
         #### graph
-        self.k_size = 5
+        self.k_size = 3
         self.sample_num = 24  # 应当为一个偶数
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
         #### terminated
@@ -35,7 +35,7 @@ class IPPArguments:
 
         # 选取前 32 大的特征值，这里抛去第一大特征值，因此最大为 sample_num - 1
         self.num_eigen_value = min(32, self.sample_num - 1)
-        self.history_size = 5  # avgpool 10 个历史时刻， 在 decision_freq 为 2hz 情况下，约使用 5s 的历史数据
+        self.history_size = 10  # avgpool 10 个历史时刻， 在 decision_freq 为 2hz 情况下，约使用 5s 的历史数据
         self.history_stride = 1  # set 1 to disable pooling
         ### parameter of attention_net
         self.EMBEDDING_DIM = 128

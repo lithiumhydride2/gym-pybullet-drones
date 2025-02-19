@@ -12,7 +12,7 @@ DEFAULT_USER_DEBUG_GUI = True
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-02.14.2025_15.30.46"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-02.18.2025_21.41.43"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]

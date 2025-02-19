@@ -19,7 +19,7 @@ from datetime import datetime
 import numpy as np
 import pybullet as p
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from gym_pybullet_drones.utils.utils import sync, str2bool
+from gym_pybullet_drones.utils.utils import sync, str2bool, get_commit_id
 from gym_pybullet_drones.envs.FlockingAviaryIPP import FlockingAviaryIPP
 from gym_pybullet_drones.models.IPPActorCriticPolicy import IPPActorCriticPolicy
 from stable_baselines3 import PPO
@@ -149,15 +149,21 @@ def learn(drone=DEFAULT_DRONE,
                                                '/checkpoints/',
                                                save_replay_buffer=False)
     callback = CallbackList([eval_call_back, check_point_call_back])
-    # try:
+
+    # save commit id and config first
+    # 读取 IPPArguments.py 中的参数
+    with open(filename + "/config.txt", "w") as f:
+        f.write(str(IPPArg.__dict__))
+
+    commit_id_path = os.path.join(filename, "commit_id.txt")
+    with open(commit_id_path, "w") as f:
+        f.write(get_commit_id())
+    f.close()
+
     model.learn(total_timesteps=int(1e6),
                 callback=callback,
                 log_interval=100,
                 progress_bar=True)  # TODO: 改为 True
-    # # except Exception as e:
-    #     print(" 中断，保存模型 ")
-    #     print(e)
-    #     model.save(filename + '/model_interruupted.zip')
 
     model.save(filename + '/final_model.zip')
     print(filename)

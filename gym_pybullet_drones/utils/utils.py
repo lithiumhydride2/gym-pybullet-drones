@@ -4,7 +4,8 @@ import time
 import argparse
 import numpy as np
 from scipy.optimize import nnls
-
+import os
+import subprocess
 ################################################################################
 
 
@@ -127,3 +128,12 @@ def circle_angle_diff(p1: np.ndarray, p2: np.ndarray):
 
 def add_t(X, t: float):
     return np.concatenate((X, np.zeros((X.shape[0], 1)) + t), axis=1)
+
+
+def get_commit_id():
+    try:
+        commit_id = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"]).strip().decode("utf-8")
+    except:
+        commit_id = "unknown"
+    return commit_id
