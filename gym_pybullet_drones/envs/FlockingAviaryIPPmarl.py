@@ -43,7 +43,7 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                          use_reynolds, default_flight_height, output_folder,
                          fov_config, obs, act, random_point)
         # for petting zoo
-
+        self.metadata = {"answer": 42}
         self.possible_agents = [i for i in range(self.NUM_DRONES)]
         # IPP 属性
         self.IPPEnvs: dict[int, IPPenv] = {}

@@ -25,7 +25,7 @@ from gym_pybullet_drones.utils.utils import sync, str2bool, get_commit_id
 from gym_pybullet_drones.envs.FlockingAviaryIPPmarl import FlockingAviaryIPPmarl
 from gym_pybullet_drones.models.IPPActorCriticPolicy import IPPActorCriticPolicy
 from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement, CallbackList, CheckpointCallback
 from gym_pybullet_drones.utils.enums import DroneModel, ActionType, ObservationType, FOVType
 from gym_pybullet_drones.envs.IPPArguments import IPPArg
@@ -60,6 +60,7 @@ vec_env_class = IPPArg.VEC_ENV_CLS
 def pettingzoo_to_sb3(env):
     env = ss.pettingzoo_env_to_vec_env_v1(env)
     env = ss.concat_vec_envs_v1(env, 1, base_class="stable_baselines3")
+    env = VecMonitor(env)
     return env
 
 
@@ -121,6 +122,7 @@ def learn(drone=DEFAULT_DRONE,
     env_kwargs['gui'] = False
     eval_env = FlockingAviaryIPPmarl(**env_kwargs)
     eval_env = pettingzoo_to_sb3(eval_env)
+
     #### check the environment's spaces
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)
@@ -163,7 +165,7 @@ def learn(drone=DEFAULT_DRONE,
         f.write(get_commit_id())
     f.close()
 
-    model.learn(total_timesteps=int(1e6),
+    model.learn(total_timesteps=int(3e6),
                 callback=callback,
                 log_interval=100,
                 progress_bar=True)  # TODO: 改为 True
