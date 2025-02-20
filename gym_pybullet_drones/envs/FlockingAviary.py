@@ -918,7 +918,7 @@ class FlockingAviary(BaseRLAviary):
         if self.control_by_RL_mask.sum() == self.NUM_DRONES:
             info_dict = {}
             for id in self.control_by_RL_ID:
-                info_dict[id] = 42
+                info_dict[id] = {"answer": 42}
             return info_dict
         else:
             return {
