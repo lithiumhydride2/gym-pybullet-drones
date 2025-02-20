@@ -21,7 +21,7 @@ class IPPArguments:
             self.DEFAULT_USER_DEBUG_GUI = False
             self.VEC_ENV_CLS = DummyVecEnv
 
-        self.CONTROL_BY_RL_MASK = None  # "random" 为随机生成,其余为固定
+        self.CONTROL_BY_RL_MASK = "all"  # "random" 为随机生成,其余为固定, "all" 为所有无人机受 RL 控制
         self.RANDOM_POINT = False  # 是否随机生成目标点，当前参数为 circle_7
         self.NUM_DRONE = 6
         #### graph

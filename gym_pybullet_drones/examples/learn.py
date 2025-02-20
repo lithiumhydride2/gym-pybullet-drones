@@ -77,8 +77,8 @@ def run(multiagent=DEFAULT_MA,
                                     act=DEFAULT_ACT)
 
     #### Check the environment's spaces ########################
-    print('[INFO] Action space:', train_env.action_space)
-    print('[INFO] Observation space:', train_env.observation_space)
+    print('[INFO] Action space:', train_env._action_space)
+    print('[INFO] Observation space:', train_env._observation_space)
 
     #### Train the model #######################################
     model = PPO(

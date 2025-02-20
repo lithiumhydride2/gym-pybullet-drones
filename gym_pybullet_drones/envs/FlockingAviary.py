@@ -120,6 +120,8 @@ class FlockingAviary(BaseRLAviary):
                       str) and control_by_RL_mask == "random":
             self.RANDOM_RL_MASK = True
             mask[np.random.randint(0, num_drones)] = 1
+        if isinstance(control_by_RL_mask, str) and control_by_RL_mask == "all":
+            mask = np.ones((num_drones, ))
         else:
             mask[0] = 1
         self.control_by_RL_mask = mask.astype(bool)
@@ -227,7 +229,7 @@ class FlockingAviary(BaseRLAviary):
             return figure, ax, quadmesh, fov
 
         if user_debug_gui:
-            for index in self.control_by_RL_ID:
+            for index in self.control_by_RL_ID[:1]:
                 self.plot_online_stuff[f"gp_std_{index}"] = init_animation(
                     f"gp_std_{index}")
                 self.plot_online_stuff[f"gp_pred_{index}"] = init_animation(
@@ -598,12 +600,13 @@ class FlockingAviary(BaseRLAviary):
             commanded to the 4 motors of each drone.
 
         """
+        # note: 对于 IPP 此处的修改没有作用
         if self.step_counter % self.FLOCKING_PER_PYB == 0:
             #### 更新 flocking 控制指令
             # migration mask 为 control mask 取反
+            # migration 为true, 则屏蔽掉该条 migration 指令
             flocking_command = self._get_command_migration(
-                migration_mask=self.control_by_RL_mask
-            ) + self._get_command_reynolds()
+                migration_mask=None)  #+ self._get_command_reynolds()
             command_norm = np.linalg.norm(flocking_command,
                                           axis=1,
                                           keepdims=True)
@@ -724,7 +727,7 @@ class FlockingAviary(BaseRLAviary):
         更新 plot_online_stuff 的内容
         """
         if self.USER_DEBUG:
-            for index in self.control_by_RL_ID:
+            for index in self.control_by_RL_ID[:1]:
                 ## 绘制 Heatmap
                 std_array = self.decisions[index].cache["all_std"].reshape(
                     (40, 40))
@@ -798,7 +801,7 @@ class FlockingAviary(BaseRLAviary):
             for nth in self.control_by_RL_ID:
                 reward[nth] = compute_reward(nth)
 
-            return np.sum(reward).astype(float)
+            return reward
 
     ################################################################################
 
@@ -813,9 +816,6 @@ class FlockingAviary(BaseRLAviary):
             Dummy value.
 
         """
-        # 这里 target_vs 的最后一项为 norm
-        if np.all(np.abs(self.target_vs[:, -1]) < 1e-3):
-            return True  # 不名原因速度消失
 
         drone_states = self.drone_states
         relative_position = self._relative_position
@@ -825,36 +825,49 @@ class FlockingAviary(BaseRLAviary):
             other_mask[nth] = False
             relative_distance = np.linalg.norm(relative_position[nth],
                                                axis=1)[other_mask]
+            # if np.abs(
+            #         self.target_vs[nth,
+            #                        -1]) < 1e-3 and nth != self.NUM_DRONES - 1:
+            #     if self.USER_DEBUG:
+            #         print(f"UAV {nth} :Terminated target speed is too low")
+            #     return True
             # 无人机间最小距离小于 1.0 m
             if np.min(relative_distance) < IPPArg.TERMINATE_MIN_DIS:
                 if self.USER_DEBUG:
-                    print("Terminated min distance")
+                    print(f"UAV {nth} :Terminated min distance")
                 return True
             # truncted when fly too low
             if drone_states[nth][2] < 1.5:
                 if self.USER_DEBUG:
-                    print("Terminated fly too low")
+                    print(f"UAV {nth} :Terminated fly too low")
                 return True
             # nth 无人机与其余无人机最大距离大于 x
             if np.min(relative_distance) > IPPArg.TERMINATE_MAX_DIS:
                 if self.USER_DEBUG:
-                    print("Terminated distance too large")
+                    print(f"UAV {nth} :Terminated distance too large")
                 return True
             if self.curr_time > IPPArg.MAX_EPISODE_LEN:
                 if self.USER_DEBUG:
-                    print("Terminated max episode length")
+                    print(f"UAV {nth} :Terminated max episode length")
                 return True
-            if np.max(self.decisions[nth].cache["all_pred"]
-                      ) < IPPArg.LOSE_BELIEF_THERSHOLD:
+            if np.max(
+                    self.decisions[nth].cache["all_pred"]
+            ) < IPPArg.LOSE_BELIEF_THERSHOLD and nth != self.NUM_DRONES - 1:
                 if self.USER_DEBUG:
-                    print("Terminated lose all target")
+                    print(f"UAV {nth} :Terminated lose all target")
                 return True
             return False
 
-        for idx in self.control_by_RL_ID:
-            if terminated(idx):
-                return True
-        return False
+        if self.control_by_RL_mask.sum() == self.NUM_DRONES:
+            terminated_dict = {}
+            for id in self.control_by_RL_ID:
+                terminated_dict[id] = terminated(id)
+            return terminated_dict
+        else:
+            for idx in self.control_by_RL_ID:
+                if terminated(idx):
+                    return True
+            return False
 
     ################################################################################
 
@@ -871,18 +884,23 @@ class FlockingAviary(BaseRLAviary):
 
         def truncated(nth):
             # truncate when a drone is too tilted
-            if abs(drone_states[nth][7]) > .4 or abs(
-                    drone_states[nth][8]) > .4:
+            if abs(drone_states[nth][7]) > .6 or abs(
+                    drone_states[nth][8]) > .6:
                 if self.USER_DEBUG:
-                    print("Truncated too tilted")
+                    print(f"UAV {nth} :Truncated too tilted")
                 return True
             return False
 
-        for idx in self.control_by_RL_ID:
-            if truncated(idx):
-                return True
-
-        return False
+        if self.control_by_RL_mask.sum() == self.NUM_DRONES:
+            truncated_dict = {}
+            for id in self.control_by_RL_ID:
+                truncated_dict[id] = truncated(id)
+            return truncated_dict
+        else:
+            for idx in self.control_by_RL_ID:
+                if truncated(idx):
+                    return True
+            return False
 
     ################################################################################
 
@@ -897,6 +915,12 @@ class FlockingAviary(BaseRLAviary):
             Dummy value.
 
         """
-        return {
-            "answer": 42
-        }  #### Calculated by the Deep Thought supercomputer in 7.5M years
+        if self.control_by_RL_mask.sum() == self.NUM_DRONES:
+            info_dict = {}
+            for id in self.control_by_RL_ID:
+                info_dict[id] = 42
+            return info_dict
+        else:
+            return {
+                "answer": 42
+            }  #### Calculated by the Deep Thought supercomputer in 7.5M years

@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from stable_baselines3.ppo import PPO
 from stable_baselines3.common.env_checker import check_env
+from gym_pybullet_drones.envs.FlockingAviaryIPP import FlockingAviaryIPP
 import time
 from gym_pybullet_drones.utils.Logger import Logger
 from flocking_ipp import *
@@ -12,7 +13,7 @@ DEFAULT_USER_DEBUG_GUI = True
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-02.18.2025_21.41.43"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-02.19.2025_11.18.32"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]

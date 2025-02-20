@@ -245,8 +245,8 @@ class BaseAviary(gym.Env):
                 "[ERROR] invalid initial_rpys in BaseAviary.__init__(), try initial_rpys.reshape(NUM_DRONES,3)"
             )
         #### Create action and observation spaces ##################
-        self.action_space = self._actionSpace()
-        self.observation_space = self._observationSpace()
+        self._action_space = self._actionSpace()
+        self._observation_space = self._observationSpace()
         #### Housekeeping ##########################################
         self._housekeeping()
         #### Update and store the drones kinematic information #####

@@ -18,9 +18,11 @@ import argparse
 from datetime import datetime
 import numpy as np
 import pybullet as p
+import supersuit as ss
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
+from pettingzoo.test import parallel_api_test
 from gym_pybullet_drones.utils.utils import sync, str2bool, get_commit_id
-from gym_pybullet_drones.envs.FlockingAviaryIPP import FlockingAviaryIPP
+from gym_pybullet_drones.envs.FlockingAviaryIPPmarl import FlockingAviaryIPPmarl
 from gym_pybullet_drones.models.IPPActorCriticPolicy import IPPActorCriticPolicy
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
@@ -53,6 +55,12 @@ DEFAULT_DECISION_FREQ = IPPArg.DECISION_FREQ
 DEFAULT_RANDOM_POINT = IPPArg.RANDOM_POINT
 
 vec_env_class = IPPArg.VEC_ENV_CLS
+
+
+def pettingzoo_to_sb3(env):
+    env = ss.pettingzoo_env_to_vec_env_v1(env)
+    env = ss.concat_vec_envs_v1(env, 1, base_class="stable_baselines3")
+    return env
 
 
 def learn(drone=DEFAULT_DRONE,
@@ -105,19 +113,14 @@ def learn(drone=DEFAULT_DRONE,
         act=act,
         random_point=random_point)  # 定义 action space and observation space
 
-    train_env = make_vec_env(FlockingAviaryIPP,
-                             env_kwargs=env_kwargs,
-                             n_envs=IPPArg.N_ENVS,
-                             seed=42,
-                             vec_env_cls=vec_env_class)
+    train_env = FlockingAviaryIPPmarl(**env_kwargs)
+    train_env = pettingzoo_to_sb3(train_env)
 
     # 这里 train_env 和 eval_env 的 pyplot 可能会发生冲突
     env_kwargs['user_debug_gui'] = False
     env_kwargs['gui'] = False
-    eval_env = make_vec_env(FlockingAviaryIPP,
-                            env_kwargs=env_kwargs,
-                            n_envs=1,
-                            vec_env_cls=vec_env_class)
+    eval_env = FlockingAviaryIPPmarl(**env_kwargs)
+    eval_env = pettingzoo_to_sb3(eval_env)
     #### check the environment's spaces
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)

@@ -1,11 +1,13 @@
+import functools
 from .FlockingAviary import *
+from pettingzoo.utils.env import ParallelEnv
 from .IPPArguments import IPPArg
 from ..utils.graph_controller import GraphController
 from ..utils.utils import circle_angle_diff
 from gymnasium.spaces import Box, Dict, Discrete
 
 
-class FlockingAviaryIPP(FlockingAviary):
+class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
     '''
     为 Flocking Aviary 添加 IPP 建模相关内容
     '''
@@ -40,6 +42,9 @@ class FlockingAviaryIPP(FlockingAviary):
                          ctrl_freq, gui, record, obstacles, user_debug_gui,
                          use_reynolds, default_flight_height, output_folder,
                          fov_config, obs, act, random_point)
+        # for petting zoo
+
+        self.possible_agents = [i for i in range(self.NUM_DRONES)]
         # IPP 属性
         self.IPPEnvs: dict[int, IPPenv] = {}
         for nth in self.control_by_RL_ID:
@@ -56,7 +61,7 @@ class FlockingAviaryIPP(FlockingAviary):
         super().plot_online()
         # 绘制图的采样
         if self.USER_DEBUG:
-            for nth in self.control_by_RL_ID:
+            for nth in self.control_by_RL_ID[:1]:
                 node_coords = self.IPPEnvs[nth].node_coords
                 curr_index = self.IPPEnvs[nth].curr_node_index
                 self.plot_online_stuff[f"gp_pred_{nth}"][1].scatter(
@@ -67,48 +72,75 @@ class FlockingAviaryIPP(FlockingAviary):
                     c="red")
                 plt.pause(1e-10)
 
-    def step(self, action):
+    def step(self, actions):
+        """Receives a dictionary of actions keyed by the agent name.
 
+        Returns the observation dictionary, reward dictionary, terminated dictionary, truncated dictionary
+        and info dictionary, where each dictionary is keyed by the agent.
+
+        Args:
+            actions : dict[AgentID, ActionType]
+        """
+        # override petting_zoo 的 step
+        # action = actions
         assert self.ACT_TYPE in [ActionType.IPP_YAW, ActionType.YAW_DIFF]
+        reprocess_action = np.zeros((self.NUM_DRONES, ))
         ### yaw_diff 模式下，action 为相对于当前节点的偏移
         if self.ACT_TYPE == ActionType.YAW_DIFF:
-            action = self.IPPEnvs[
-                self.control_by_RL_ID[0]].curr_node_index + action - 1
-            action = IPPArg.sample_num - 1 if action == -1 else action
-            action = 0 if action == IPPArg.sample_num else action
+            for agent in self.control_by_RL_ID:
+                action = self.IPPEnvs[agent].curr_node_index + actions[
+                    agent] - 1
+                action = IPPArg.sample_num - 1 if action == -1 else action
+                action = 0 if action == IPPArg.sample_num else action
+                reprocess_action[agent] = action
+                self.IPPEnvs[agent].step(action)
+
         elif self.ACT_TYPE == ActionType.IPP_YAW:
-            knn_edge_inputs = self.IPPEnvs[
-                self.control_by_RL_ID[0]].knn_edge_inputs
-            curr_index = self.IPPEnvs[self.control_by_RL_ID[0]].curr_node_index
-            action = knn_edge_inputs[curr_index.item()][action]
-        # 使用当前 obs 后处理 action
-        self.IPPEnvs[self.control_by_RL_ID[0]].step(action)
+            for agent in self.control_by_RL_ID:
+                knn_edge_inputs = self.IPPEnvs[agent].knn_edge_inputs
+                curr_index = self.IPPEnvs[agent].curr_node_index
+                action = knn_edge_inputs[curr_index.item()][actions[agent]]
+                reprocess_action[agent] = action
+                self.IPPEnvs[agent].step(action)
 
         # step 中重新计算 obs 与 action
 
         def finish_current_action(action):
-            if circle_angle_diff(
-                    self.IPPEnvs[self.control_by_RL_ID[0]].node_coords[action],
-                    self._computeHeading(
-                        self.control_by_RL_ID[0])[:2]) < np.deg2rad(5):
-                return True
+            for agent in self.control_by_RL_ID:
+                if circle_angle_diff(
+                        self.IPPEnvs[self.control_by_RL_ID[agent]].node_coords[
+                            action[agent]],
+                        self._computeHeading(
+                            self.control_by_RL_ID[agent])[:2]) < np.deg2rad(5):
+                    return True
             return False
 
         for _ in range(self.DECISION_PER_CTRL - 1):
             # subclass step is in frequency of CTRL
             # repeat, flocking update in _preprocessAction
-            super().step(action, need_return=False)
+            super().step(reprocess_action, need_return=False)
 
-        while not finish_current_action(action):
-            super().step(action, need_return=False)
+        # while not finish_current_action(reprocess_action):
+        #     super().step(reprocess_action, need_return=False)
         # last times
-        return super().step(action, need_return=True)
+        observations, rewards, terminateds, truncateds, infos = super().step(
+            reprocess_action, need_return=True)
+
+        for agent in self.agents:
+            # 如果任意 agent 发生 terminated 或 truncated，则所有 agent terminated
+            if terminateds.get(agent, False) or truncateds.get(agent, False):
+                terminateds = {agent: True for agent in self.agents}
+                self.agents = []  # for petting zoo， 需要将 agents 置空
+                break
+
+        return observations, rewards, terminateds, truncateds, infos
 
     def reset(self, seed=None, options=None):
         '''
         reset 的最终作用为获取 initial_obs, initial_info
         '''
-
+        ### for petting zoo
+        self.agents = self.possible_agents
         #### 重新初始化 control_by_RL_MASK
         if hasattr(self, "RANDOM_RL_MASK") and self.RANDOM_RL_MASK:
             mask = np.zeros((self.NUM_DRONES, ))
@@ -118,8 +150,6 @@ class FlockingAviaryIPP(FlockingAviary):
             self.control_by_RL_ID = np.array(
                 list(range(0, self.NUM_DRONES)),
                 dtype=np.int8)[self.control_by_RL_mask]
-
-        ## for petting zoo
 
         for nth in self.control_by_RL_ID:
             # 这里的 yaw_start 由于物理引擎后更新，使用 INIT_RYPS 初始化
@@ -141,6 +171,18 @@ class FlockingAviaryIPP(FlockingAviary):
                     planner=None,
                     node_coords=self.IPPEnvs[nth].node_coords)
         return super().reset(seed, options)
+
+    @functools.lru_cache(maxsize=IPPArg.NUM_DRONE)
+    def observation_space(self, agent):
+        '''
+        override observation_space
+        '''
+        return self._observationSpace()
+
+    @functools.lru_cache(maxsize=IPPArg.NUM_DRONE)
+    def action_space(self, agent):
+        '''override action_space'''
+        return self._actionSpace()
 
     def _actionSpace(self):
         '''
@@ -197,14 +239,12 @@ class FlockingAviaryIPP(FlockingAviary):
                     dtype=np.int64)
             })
         ## 如果是 marl 的形式，返回多无人机 dict
-        if self.control_by_RL_mask.sum() == self.NUM_DRONES:
-            return Dict({i: single_obs_space for i in self.control_by_RL_ID})
-        else:
-            return single_obs_space
+        return single_obs_space
 
     def _computeObs(self):
         '''
         Return the current observation of the environment.
+        OK for petting zoo
         '''
         ### 这里取消 step 与 decision 的严格对齐
         # assert self.step_counter % self.DECISION_PER_PYB == 0
@@ -274,6 +314,9 @@ class FlockingAviaryIPP(FlockingAviary):
         return ret
 
     def _computeReward(self):
+        '''
+        转换为 petting zoo 的形式
+        '''
         reward: np.ndarray = super()._computeReward()
         for nth in self.control_by_RL_ID:
             smooth_reward = circle_angle_diff(
@@ -283,9 +326,12 @@ class FlockingAviaryIPP(FlockingAviary):
 
         # 在 marl 的情况下， reward 为所有无人机 reward 的平均值
         if self.control_by_RL_mask.sum() == self.NUM_DRONES:
-            return float(np.mean(reward))
+            reward_dict = {}
+            for agent in self.control_by_RL_ID:
+                reward_dict[agent] = reward[agent]
+            return reward_dict
         else:
-            return float(reward.sum())
+            return float(reward)
 
     def _preprocessAction(self, action):
         """
@@ -298,6 +344,7 @@ class FlockingAviaryIPP(FlockingAviary):
         Parameters
         ----------
         action : ndarray
+            (num_drones,)
             The desired target_yaw $$[cos(\theta), sin(\theta)]$$, to be translated into RPMs.
 
         Returns
@@ -309,10 +356,9 @@ class FlockingAviaryIPP(FlockingAviary):
         """
         if self.step_counter % self.FLOCKING_PER_PYB == 0:
             #### 更新 flocking 控制指令
-            # migration mask 为 control mask 取反
+            # migration_mask 为 true , 则无法获得导航迁移指令
             flocking_command = self._get_command_migration(
-                migration_mask=self.control_by_RL_mask
-            ) + self._get_command_reynolds()
+                migration_mask=None) + self._get_command_reynolds()
             command_norm = np.linalg.norm(flocking_command,
                                           axis=1,
                                           keepdims=True)
@@ -329,7 +375,10 @@ class FlockingAviaryIPP(FlockingAviary):
             target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
                                           dtype=np.float32)
             for id in self.control_by_RL_ID:
-                target_yaws_circle[id] = self.IPPEnvs[id].node_coords[action]
+                target_yaws_circle[id] = self.IPPEnvs[id].node_coords[int(
+                    action[id])]
+        else:
+            raise ValueError
         target_yaws = circle_to_yaw(target_yaws_circle)
         return self._computeRpmFromCommand(self.target_vs,
                                            target_yaws=target_yaws)
@@ -404,4 +453,7 @@ class IPPenv:
 
 
 if __name__ == "__main__":
-    pass
+
+    from pettingzoo.test import parallel_api_test
+    env = FlockingAviaryIPPmarl()
+    parallel_api_test(env)

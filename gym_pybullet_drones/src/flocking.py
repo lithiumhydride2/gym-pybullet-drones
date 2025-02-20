@@ -116,8 +116,8 @@ def learn(drone=DEFAULT_DRONE,
     env_kwargs['gui'] = False
     eval_env = Monitor(FlockingAviaryIPP(**env_kwargs))
     #### check the environment's spaces
-    print('[INFO] Action space:', train_env.action_space)
-    print('[INFO] Observation space:', train_env.observation_space)
+    print('[INFO] Action space:', train_env._action_space)
+    print('[INFO] Observation space:', train_env._observation_space)
 
     ### train the model
     model = PPO('MlpPolicy',
