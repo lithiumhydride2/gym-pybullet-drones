@@ -135,7 +135,10 @@ def learn(drone=DEFAULT_DRONE,
                 learning_rate=3e-4,
                 tensorboard_log=filename + '/tb/',
                 batch_size=64,
-                n_steps=2048)  # n_steps 为交互 step 后， 更新 policy
+                n_steps=2048,
+                ent_coef=0.05)
+    # n_steps 为交互 step 后， 更新 policy
+    # ent_coef： maximum entropy regularized objective 的系数，scalable 声称能在完全分布式的环境下增强 weak cooperation 的能力
     if continue_train is not None:
         model.load(continue_train, env=train_env)
     callback_on_best = StopTrainingOnNoModelImprovement(

@@ -773,17 +773,17 @@ class FlockingAviary(BaseRLAviary):
 
             def compute_reward(nth):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()
-                # high_info_idx = self.decisions[
-                #     nth].GP_ground_truth.get_high_info_indx(ground_truth)
-                # ## Unc update reward, 最大值为1
-                # _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
-                #     self.curr_time, high_info_idx, return_all=True)
-                # unc_list = np.asarray(unc_list)
-                # unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
-                # unc_update = self.cache['unc'][nth] - unc_list
-                # reward = np.sum(unc_update[unc_update > .0])
-                # self.cache['unc'][nth] = unc_list
-                reward = 0.
+                high_info_idx = self.decisions[
+                    nth].GP_ground_truth.get_high_info_indx(ground_truth)
+                ## Unc update reward, 最大值为1
+                # 加入 unc reward 的设计
+                _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
+                    self.curr_time, high_info_idx, return_all=True)
+                unc_list = np.asarray(unc_list)
+                unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
+                unc_update = self.cache['unc'][nth] - unc_list
+                reward = np.sum(unc_update[unc_update > .0])
+                self.cache['unc'][nth] = unc_list
 
                 ## Unc reward 都是累计 reward, 需要即使奖励
                 preds = self.decisions[nth].cache["preds"]
