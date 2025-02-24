@@ -7,13 +7,9 @@ import time
 from gym_pybullet_drones.utils.Logger import Logger
 from flocking_ipp import *
 
-# override
-DEFAULT_GUI = True
-DEFAULT_USER_DEBUG_GUI = True
-
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-02.19.2025_11.18.32"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-02.21.2025_22.12.38"
     model_path = filename + '/best_model.zip'
     model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]

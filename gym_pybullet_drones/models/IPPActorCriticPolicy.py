@@ -22,7 +22,15 @@ class IPPFeaturesExtractor(BaseFeaturesExtractor):
         Return:
             return in shape (batch_size, features_dim )
         '''
-        return self.attention_net(node_inputs=observation["node_inputs"],
+        ## 这里从 pedded 的 node_inputs 中取出实际有用的部分
+        if IPPArg.NUM_DRONE < IPPArg.MAX_NUM_DRONE:
+            node_input_feat_dim = 2 + (IPPArg.NUM_DRONE -
+                                       1) * IPPArg.BELIEF_FEATURE_DIM
+            node_inputs = observation["node_inputs"][
+                ..., :node_input_feat_dim]  # 仅从最后一个维度提取
+        else:
+            raise ValueError
+        return self.attention_net(node_inputs=node_inputs,
                                   dt_pool_inputs=observation["dt_pool_inputs"],
                                   current_index=observation["curr_index"],
                                   dist_inputs=observation["dist_inputs"],

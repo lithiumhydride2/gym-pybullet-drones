@@ -212,10 +212,9 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                 Box(
                     low=0.,
                     high=1.,
-                    shape=(
-                        IPPArg.history_size // IPPArg.history_stride,
-                        IPPArg.sample_num, 2 +
-                        (self.NUM_DRONES - 1) * 3),  # 3: (yaw_coord, belief)
+                    shape=(IPPArg.history_size // IPPArg.history_stride,
+                           IPPArg.sample_num, 2 + (IPPArg.MAX_NUM_DRONE - 1) *
+                           3),  # 3: (yaw_coord, belief)
                     dtype=np.float32),
                 "dt_pool_inputs":
                 Box(low=-np.inf,
@@ -294,6 +293,17 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                     ego_heading=circle_to_yaw(
                         self._computeHeading(nth)[:2].reshape(-1, 2)),
                     relative_pose=relative_position[nth][other_pose_mask])
+                # 对 gaussian_obs["node_inputs"]进行填充
+                pedded_node_inputs = np.zeros(
+                    shape=self._observation_space["node_inputs"].shape)
+                node_input_feat_dim = 2 + (IPPArg.NUM_DRONE - 1) * 3
+                if IPPArg.NUM_DRONE < IPPArg.MAX_NUM_DRONE:
+                    pedded_node_inputs[:, :, :
+                                       node_input_feat_dim] = gaussian_obs[
+                                           "node_inputs"]
+                    gaussian_obs["node_inputs"] = pedded_node_inputs
+                else:
+                    raise ValueError
                 # 合并两个 obs
                 graph_obs = self.IPPEnvs[nth].Obs
                 obs[nth] = {

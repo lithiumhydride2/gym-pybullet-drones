@@ -23,7 +23,8 @@ class IPPArguments:
 
         self.CONTROL_BY_RL_MASK = "all"  # "random" 为随机生成,其余为固定, "all" 为所有无人机受 RL 控制
         self.RANDOM_POINT = False  # 是否随机生成目标点，当前参数为 circle_7
-        self.NUM_DRONE = 3
+        self.NUM_DRONE = 4
+        self.MAX_NUM_DRONE = 20  # 在 observation space 中使用的最大无人机数量
         #### graph
         self.k_size = 3
         self.sample_num = 24  # 应当为一个偶数
