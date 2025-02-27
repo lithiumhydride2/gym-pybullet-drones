@@ -55,7 +55,8 @@ class FlockingAviary(BaseRLAviary):
                  fov_config: FOVType = FOVType.SINGLE,
                  obs: ObservationType = ObservationType.GAUSSIAN,
                  act: ActionType = ActionType.YAW,
-                 random_point=True):
+                 random_point=True,
+                 waypoint_name="square"):
         """Initialization of an aviary environment for or high-level planning.
 
         Parameters
@@ -165,7 +166,9 @@ class FlockingAviary(BaseRLAviary):
         self.default_flight_height = default_flight_height
         self.RANDOM_POINT = random_point
         if self.use_reynolds:
-            self.reynolds = Reynolds(random_point=self.RANDOM_POINT)
+            self.waypoint_name = waypoint_name
+            self.reynolds = Reynolds(random_point=self.RANDOM_POINT,
+                                     waypoint_name=self.waypoint_name)
         self.fov_range = fov_config.value
         self.FOV = None
         ### decision
@@ -478,7 +481,7 @@ class FlockingAviary(BaseRLAviary):
                     if 0 < proj_length < line_length:
                         return False
             return np.random.random(
-            ) > self.VISABLE_FAIL_DETECT  # 90% 的概率能够检出目标
+            ) > self.VISABLE_FAIL_DETECT  # 95% 的概率能够检出目标
 
         mask = self._computeFovMask(nth_drone)
 
@@ -560,7 +563,7 @@ class FlockingAviary(BaseRLAviary):
         self.target_yaw_circle = np.zeros((self.NUM_DRONES, 2))  # 以单位圆上表达的 yaw
         self.target_yaw = np.zeros((self.NUM_DRONES, ))
         self.reynolds = Reynolds(random_point=self.RANDOM_POINT,
-                                 waypoint_name="circle_7")
+                                 waypoint_name=self.waypoint_name)
 
         ### cache
         self.cache = {}

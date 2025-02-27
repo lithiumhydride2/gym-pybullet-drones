@@ -48,8 +48,8 @@ DEFAULT_NUM_DRONE = IPPArg.NUM_DRONE
 
 DEFAULT_OBS_TYPE = ObservationType.IPP
 DEFAULT_ACT_TYPE = ActionType.IPP_YAW
-DEFAULT_FOV_CONFIG = FOVType.SINGLE
 
+DEFAULT_FOV_CONFIG = IPPArg.FOV_CONFIG
 DEFAULT_FLOCKING_FREQ = IPPArg.FLOCKIN_FREQ
 DEFAULT_DECISION_FREQ = IPPArg.DECISION_FREQ
 DEFAULT_RANDOM_POINT = IPPArg.RANDOM_POINT
@@ -112,7 +112,8 @@ def learn(drone=DEFAULT_DRONE,
         fov_config=fov_config,
         obs=obs,
         act=act,
-        random_point=random_point)  # 定义 action space and observation space
+        random_point=random_point,
+        waypoint_name="random_50")  # 定义 action space and observation space
 
     train_env = FlockingAviaryIPPmarl(**env_kwargs)
     train_env = pettingzoo_to_sb3(train_env)
@@ -140,6 +141,7 @@ def learn(drone=DEFAULT_DRONE,
     # n_steps 为交互 step 后， 更新 policy
     # ent_coef： maximum entropy regularized objective 的系数，scalable 声称能在完全分布式的环境下增强 weak cooperation 的能力
     if continue_train is not None:
+        print("Continue training from ", continue_train)
         model.load(continue_train, env=train_env)
     callback_on_best = StopTrainingOnNoModelImprovement(
         max_no_improvement_evals=int(1e2), min_evals=int(1e3), verbose=1)
@@ -259,6 +261,6 @@ if __name__ == "__main__":
                         metavar='',
                         help="If none, continue train from abs path")
     # 这里需要添加 args = [] 才能使用 vscode 进行 debug
-    ARGS = parser.parse_args(args=[])
+    ARGS = parser.parse_args()
 
     learn(**vars(ARGS))

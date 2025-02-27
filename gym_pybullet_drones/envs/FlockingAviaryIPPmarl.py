@@ -34,14 +34,32 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                  fov_config=FOVType.SINGLE,
                  obs=ObservationType.GAUSSIAN,
                  act=ActionType.YAW,
-                 random_point=True):
+                 random_point=True,
+                 waypoint_name="square"):
 
-        super().__init__(drone_model, num_drones, control_by_RL_mask,
-                         neighbourhood_radius, initial_xyzs, initial_rpys,
-                         physics, pyb_freq, flocking_freq_hz, decision_freq_hz,
-                         ctrl_freq, gui, record, obstacles, user_debug_gui,
-                         use_reynolds, default_flight_height, output_folder,
-                         fov_config, obs, act, random_point)
+        super().__init__(drone_model,
+                         num_drones,
+                         control_by_RL_mask,
+                         neighbourhood_radius,
+                         initial_xyzs,
+                         initial_rpys,
+                         physics,
+                         pyb_freq,
+                         flocking_freq_hz,
+                         decision_freq_hz,
+                         ctrl_freq,
+                         gui,
+                         record,
+                         obstacles,
+                         user_debug_gui,
+                         use_reynolds,
+                         default_flight_height,
+                         output_folder,
+                         fov_config,
+                         obs,
+                         act,
+                         random_point,
+                         waypoint_name=waypoint_name)
         # for petting zoo
         self.metadata = {"answer": 42}
         self.possible_agents = [i for i in range(self.NUM_DRONES)]
