@@ -169,6 +169,12 @@ class FlockingAviary(BaseRLAviary):
             self.waypoint_name = waypoint_name
             self.reynolds = Reynolds(random_point=self.RANDOM_POINT,
                                      waypoint_name=self.waypoint_name)
+            # 输出信息
+            if self.RANDOM_POINT:
+                print("[INFO] Using random point in reynolds command.")
+            else:
+                print(
+                    f"[INFO] Using {self.waypoint_name} in reynolds command.")
         self.fov_range = fov_config.value
         self.FOV = None
         ### decision

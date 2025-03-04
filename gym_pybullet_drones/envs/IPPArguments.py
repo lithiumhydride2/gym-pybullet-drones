@@ -23,7 +23,8 @@ class IPPArguments:
             self.VEC_ENV_CLS = DummyVecEnv
 
         self.CONTROL_BY_RL_MASK = "all"  # "random" 为随机生成,其余为固定, "all" 为所有无人机受 RL 控制
-        self.RANDOM_POINT = False  # 是否随机生成目标点，当前参数为 circle_7
+        self.RANDOM_POINT = False  # 是否随机生成目标点，当前参数为 random_50
+        self.WAYPOINT_FILE_NAME = "circle_7"  # or "circle_7"
         self.NUM_DRONE = 6
         self.FOV_CONFIG = FOVType.DOUBLE
         self.MAX_NUM_DRONE = 20  # 在 observation space 中使用的最大无人机数量
@@ -32,7 +33,7 @@ class IPPArguments:
         self.sample_num = 24  # 应当为一个偶数
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
         #### terminated
-        self.MAX_EPISODE_LEN = 400  # max length of an episode / s
+        self.MAX_EPISODE_LEN = 600  # max length of an episode / s
         self.TERMINATE_MIN_DIS = 1.0
         self.TERMINATE_MAX_DIS = 5.0
 

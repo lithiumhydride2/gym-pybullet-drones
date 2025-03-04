@@ -96,24 +96,24 @@ def learn(drone=DEFAULT_DRONE,
                           for x in range(num_drones)])  # 横一字排列
     INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
 
-    env_kwargs = dict(
-        drone_model=drone,
-        num_drones=num_drones,
-        control_by_RL_mask=control_by_RL_mask,
-        initial_xyzs=INIT_XYZS,
-        initial_rpys=INIT_RPYS,
-        pyb_freq=simulation_freq_hz,
-        flocking_freq_hz=flocking_freq_hz,
-        decision_freq_hz=decision_freq_hz,
-        ctrl_freq=control_freq_hz,
-        gui=gui,
-        user_debug_gui=user_debug_gui,
-        default_flight_height=default_flight_height,
-        fov_config=fov_config,
-        obs=obs,
-        act=act,
-        random_point=random_point,
-        waypoint_name="random_50")  # 定义 action space and observation space
+    env_kwargs = dict(drone_model=drone,
+                      num_drones=num_drones,
+                      control_by_RL_mask=control_by_RL_mask,
+                      initial_xyzs=INIT_XYZS,
+                      initial_rpys=INIT_RPYS,
+                      pyb_freq=simulation_freq_hz,
+                      flocking_freq_hz=flocking_freq_hz,
+                      decision_freq_hz=decision_freq_hz,
+                      ctrl_freq=control_freq_hz,
+                      gui=gui,
+                      user_debug_gui=user_debug_gui,
+                      default_flight_height=default_flight_height,
+                      fov_config=fov_config,
+                      obs=obs,
+                      act=act,
+                      random_point=random_point,
+                      waypoint_name=IPPArg.WAYPOINT_FILE_NAME
+                      )  # 定义 action space and observation space
 
     train_env = FlockingAviaryIPPmarl(**env_kwargs)
     train_env = pettingzoo_to_sb3(train_env)

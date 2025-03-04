@@ -41,8 +41,8 @@ class Reynolds():
         self.random_range = random_range
         self.random_point = random_point
 
-        if not self.random_point:
-            print(f"[INFO] Using waypoints: {waypoint_name}")
+        # if not self.random_point:
+        #     print(f"[INFO] Using waypoints: {waypoint_name}")
 
     def command(self, positions, velocities=None):
         '''
