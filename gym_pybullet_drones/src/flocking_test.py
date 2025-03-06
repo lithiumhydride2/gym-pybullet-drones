@@ -2,27 +2,25 @@ import numpy as np
 import torch
 from stable_baselines3.ppo import PPO
 from stable_baselines3.common.env_checker import check_env
-from gym_pybullet_drones.envs.FlockingAviaryIPP import FlockingAviaryIPP
+# from gym_pybullet_drones.envs.FlockingAviaryIPP import FlockingAviaryIPP
+from gym_pybullet_drones.envs.FlockingAviaryIPPmarl import FlockingAviaryIPPmarl
 import time
 from gym_pybullet_drones.utils.Logger import Logger
 from flocking_ipp import *
 
 
 def main():
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-02.21.2025_22.12.38"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.04.2025_22.27.59"
     model_path = filename + '/best_model.zip'
-    model = PPO.load(model_path)
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(DEFAULT_NUM_DRONE)])  # 横一字排列
 
     INIT_RPYS = np.array([[0, 0, 0]
                           for x in range(DEFAULT_NUM_DRONE)])  # 偏航角初始化为 0
-    control_by_rl_mask = np.zeros((DEFAULT_NUM_DRONE, ))
-    control_by_rl_mask[0] = 1
 
     env_kwargs = dict(drone_model=DEFAULT_DRONE,
                       num_drones=DEFAULT_NUM_DRONE,
-                      control_by_RL_mask=control_by_rl_mask.astype(bool),
+                      control_by_RL_mask=DEFAULT_CONTROL_BY_RL_MASK,
                       initial_xyzs=INIT_XYZS,
                       initial_rpys=INIT_RPYS,
                       pyb_freq=DEFAULT_SIMULATION_FREQ_HZ,
@@ -36,34 +34,35 @@ def main():
                       obs=DEFAULT_OBS_TYPE,
                       act=DEFAULT_ACT_TYPE,
                       random_point=False)
-    test_env = FlockingAviaryIPP(**env_kwargs)
-
+    test_env = FlockingAviaryIPPmarl(**env_kwargs)
+    test_env = pettingzoo_to_sb3(test_env)
+    model = PPO.load(model_path, test_env)
     logger = Logger(logging_freq_hz=DEFAULT_DECISION_FREQ,
                     num_drones=DEFAULT_NUM_DRONE,
                     output_folder=filename + '/test/')
-
-    obs, info = test_env.reset(seed=42)
+    obs = test_env.reset()
     start = time.time()
-
     TEST_DURATION = 100
-    for i in range(TEST_DURATION * test_env.DECISION_FREQ_HZ):
+
+    for i in range(TEST_DURATION * IPPArg.DECISION_FREQ):
 
         action, _states = model.predict(obs, deterministic=True)
         print("Action is : {}".format(action))
-        obs, reward, terminated, truncated, info = test_env.step(action)
+        obs, reward, terminated, info = test_env.step(action)
 
-        for j in range(test_env.NUM_DRONES):
-            logger.log(drone=j,
-                       timestamp=i / test_env.DECISION_FREQ_HZ,
-                       state=test_env.drone_states[j],
-                       control=np.hstack(
-                           [test_env.target_vs[j, :3],
-                            np.zeros(9)]))
+        for j in range(IPPArg.NUM_DRONE):
+            pass
+            # logger.log(drone=j,
+            #            timestamp=i / IPPArg.DECISION_FREQ,
+            #            state=test_env.drone_states[j],
+            #            control=np.hstack(
+            #                [test_env.target_vs[j, :3],
+            #                 np.zeros(9)]))
         test_env.render()
-        if terminated:
-            obs, info = test_env.reset(seed=42, options={})
-        if test_env.GUI:
-            sync(i, start, 1 / test_env.DECISION_FREQ_HZ)
+        if terminated.any():
+            obs, info = test_env.reset()
+        if IPPArg.DEFAULT_GUI:
+            sync(i, start, 1 / IPPArg.DECISION_FREQ)
 
     test_env.close()
     #### plot

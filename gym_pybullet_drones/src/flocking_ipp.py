@@ -92,7 +92,7 @@ def learn(drone=DEFAULT_DRONE,
         os.makedirs(filename + "/")
 
     # env config
-    INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
+    INIT_XYZS = np.array([[x * 2.8, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(num_drones)])  # 横一字排列
     INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
 
@@ -261,6 +261,6 @@ if __name__ == "__main__":
                         metavar='',
                         help="If none, continue train from abs path")
     # 这里需要添加 args = [] 才能使用 vscode 进行 debug
-    ARGS = parser.parse_args()
+    ARGS = parser.parse_args(args=[])
 
     learn(**vars(ARGS))

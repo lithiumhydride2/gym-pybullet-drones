@@ -34,7 +34,7 @@ class IPPArguments:
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
         #### terminated
         self.MAX_EPISODE_LEN = 600  # max length of an episode / s
-        self.TERMINATE_MIN_DIS = 1.0
+        self.TERMINATE_MIN_DIS = 0.6  # 1.0m, 修改为 0.6 以更简单地学习
         self.TERMINATE_MAX_DIS = 5.0
 
         # 选取前 32 大的特征值，这里抛去第一大特征值，因此最大为 sample_num - 1
