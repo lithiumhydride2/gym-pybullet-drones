@@ -349,7 +349,7 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
         for nth in self.control_by_RL_ID:
             smooth_reward = circle_angle_diff(
                 self.IPPEnvs[nth].route_coord[-1],
-                self.IPPEnvs[nth].route_coord[-2]) * 1
+                self.IPPEnvs[nth].route_coord[-2]) * 1e-1
             reward[nth] -= smooth_reward
 
         # 在 marl 的情况下， reward 为所有无人机 reward 的平均值
