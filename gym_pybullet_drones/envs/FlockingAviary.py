@@ -795,13 +795,13 @@ class FlockingAviary(BaseRLAviary):
                 self.cache['unc'][nth] = unc_list
 
                 ## Unc reward 都是累计 reward, 需要即使奖励
-                preds = self.decisions[nth].cache["preds"]
-                observed_target = 0
+                # preds = self.decisions[nth].cache["preds"]
+                # observed_target = 0
 
-                for pred in preds:
-                    if np.max(pred) > IPPArg.EXIST_THRESHOLD:
-                        observed_target += 1
-                reward += observed_target
+                # for pred in preds:
+                #     if np.max(pred) > IPPArg.EXIST_THRESHOLD:
+                #         observed_target += 1
+                # reward += observed_target
                 # 以潜在目标数量进行归一化
                 reward = reward / (self.NUM_DRONES - 1) if reward > 0 else 0.
                 return reward
