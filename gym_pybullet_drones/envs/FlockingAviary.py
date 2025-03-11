@@ -200,8 +200,8 @@ class FlockingAviary(BaseRLAviary):
         self.cache['unc'] = [1.0] * self.NUM_DRONES
 
         ### hyper param
-        self.VISABLE_DEGREE_THERSHOLD = 5  # in degree
-        self.VISABLE_FAIL_DETECT = 0.05  # 5% 的概率无法检出目标
+        self.VISABLE_DEGREE_THERSHOLD = 17  # in degree, compute from arctan2(0.3,2)
+        self.VISABLE_FAIL_DETECT = 0.2  # 10% 的概率无法检出目标
 
     ################################################################################
     def _gp_debug_init(self, user_debug_gui):
@@ -494,7 +494,7 @@ class FlockingAviary(BaseRLAviary):
         for index, pos in enumerate(mask.astype(bool)):
             if pos:
                 mask_temp = mask
-                mask_temp[index] = 0
+                mask_temp[index] = 0  # 无法看到自身
                 # 此处判断 target 是否被任意 obstacles 遮挡
                 mask[index] = visable(
                     self.drone_states[nth_drone, 0:2], self.drone_states[index,
@@ -791,17 +791,18 @@ class FlockingAviary(BaseRLAviary):
                 unc_list = np.asarray(unc_list)
                 unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
                 unc_update = self.cache['unc'][nth] - unc_list
-                reward = np.sum(unc_update[unc_update > .0])
+                reward = np.sum(
+                    unc_update[unc_update > .0]) * 1e1  # unc reward 的缩放因子
                 self.cache['unc'][nth] = unc_list
 
                 ## Unc reward 都是累计 reward, 需要即使奖励
-                # preds = self.decisions[nth].cache["preds"]
-                # observed_target = 0
+                preds = self.decisions[nth].cache["preds"]
+                observed_target = 0
 
-                # for pred in preds:
-                #     if np.max(pred) > IPPArg.EXIST_THRESHOLD:
-                #         observed_target += 1
-                # reward += observed_target
+                for pred in preds:
+                    if np.max(pred) > IPPArg.EXIST_THRESHOLD:
+                        observed_target += 1
+                reward += observed_target
                 # 以潜在目标数量进行归一化
                 reward = reward / (self.NUM_DRONES - 1) if reward > 0 else 0.
                 return reward
