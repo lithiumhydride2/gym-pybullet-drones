@@ -200,8 +200,8 @@ class FlockingAviary(BaseRLAviary):
         self.cache['unc'] = [1.0] * self.NUM_DRONES
 
         ### hyper param
-        self.VISABLE_DEGREE_THERSHOLD = 17  # in degree, compute from arctan2(0.3,2)
-        self.VISABLE_FAIL_DETECT = 0.2  # 10% 的概率无法检出目标
+        self.VISABLE_DEGREE_THERSHOLD = 20  # in degree, compute from arctan2(0.3,2)
+        self.VISABLE_FAIL_DETECT = 0.3  # 10% 的概率无法检出目标
 
     ################################################################################
     def _gp_debug_init(self, user_debug_gui):
