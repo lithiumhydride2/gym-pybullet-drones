@@ -386,7 +386,8 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
             #### 更新 flocking 控制指令
             # migration_mask 为 true , 则无法获得导航迁移指令
             flocking_command = self._get_command_migration(
-                migration_mask=None) + self._get_command_reynolds()
+                migration_mask=IPPArg.MIGRATION_MASK
+            ) + self._get_command_reynolds()
             command_norm = np.linalg.norm(flocking_command,
                                           axis=1,
                                           keepdims=True)

@@ -200,7 +200,7 @@ class FlockingAviary(BaseRLAviary):
         self.cache['unc'] = [1.0] * self.NUM_DRONES
 
         ### hyper param
-        self.VISABLE_DEGREE_THERSHOLD = 20  # in degree, compute from arctan2(0.3,2)
+        self.VISABLE_DEGREE_THERSHOLD = 30  # in degree, compute from arctan2(0.3,2)
         self.VISABLE_FAIL_DETECT = 0.3  # 10% 的概率无法检出目标
 
     ################################################################################
@@ -792,7 +792,7 @@ class FlockingAviary(BaseRLAviary):
                 unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
                 unc_update = self.cache['unc'][nth] - unc_list
                 reward = np.sum(
-                    unc_update[unc_update > .0]) * 1e1  # unc reward 的缩放因子
+                    unc_update[unc_update > .0]) * 5e1  # unc reward 的缩放因子
                 self.cache['unc'][nth] = unc_list
 
                 ## Unc reward 都是累计 reward, 需要即使奖励

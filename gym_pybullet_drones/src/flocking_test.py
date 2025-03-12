@@ -11,7 +11,7 @@ from flocking_ipp import *
 
 def main():
     # 现在和 ROS 环境中同一个 model
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.10.2025_22.01.18"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.11.2025_21.31.43"
     model_path = filename + '/best_model.zip'
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(DEFAULT_NUM_DRONE)])  # 横一字排列
