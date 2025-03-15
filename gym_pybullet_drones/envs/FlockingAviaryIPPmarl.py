@@ -101,7 +101,7 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
         """
         # override petting_zoo 的 step
         # action = actions
-        assert self.ACT_TYPE in [ActionType.IPP_YAW, ActionType.YAW_DIFF]
+        assert self.ACT_TYPE in [ActionType.IPP_YAW, ActionType.YAW]
         reprocess_action = np.zeros((self.NUM_DRONES, ))
         ### yaw_diff 模式下，action 为相对于当前节点的偏移
         if self.ACT_TYPE == ActionType.YAW_DIFF:
@@ -120,6 +120,8 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                 action = knn_edge_inputs[curr_index.item()][actions[agent]]
                 reprocess_action[agent] = action
                 self.IPPEnvs[agent].step(action)
+        elif self.ACT_TYPE == ActionType.YAW:
+            reprocess_action = actions
 
         # step 中重新计算 obs 与 action
 
@@ -399,8 +401,13 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                  np.min((np.ones(
                      command_norm.shape), command_norm / self.SPEED_LIMIT),
                         axis=0)))  # 将最大速度限制在 speed_limit
-
-        if self.ACT_TYPE in [ActionType.IPP_YAW, ActionType.YAW_DIFF]:
+        # 添加 ACT_TYPE 为 YAW 的可能
+        if self.ACT_TYPE == ActionType.YAW:
+            # 将对于 control_by_RL_mask 决策的 action 嵌入 action_all
+            target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
+                                          dtype=np.float32)
+            target_yaws_circle[self.control_by_RL_mask] = yaw_to_circle(action)
+        elif self.ACT_TYPE in [ActionType.IPP_YAW, ActionType.YAW_DIFF]:
             target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
                                           dtype=np.float32)
             for id in self.control_by_RL_ID:

@@ -1,6 +1,7 @@
 import time
 import concurrent.futures
 import numpy as np
+import random
 from ..gaussian_process import GaussianProcessWrapper
 from .motion_primitive import MotionPrimitive
 from .uav_detection_sim import UavDetectionSim
@@ -124,10 +125,10 @@ class TSPBaseLine:
             self.grid_size = gp_wrapper.GPs[0].grid_size
 
         for index, gp in enumerate(gp_wrapper.GPs):
-            if gp.y_pred_at_grid is None:
+            if gp.cache.get("y_pred_at_grid", None) is None:
                 continue
             else:
-                y_pred_grid = gp.y_pred_at_grid.reshape(
+                y_pred_grid = gp.cache.get("y_pred_at_grid").reshape(
                     self.grid_size, self.grid_size)
                 max_row, max_col = np.unravel_index(y_pred_grid.argmax(),
                                                     y_pred_grid.shape)
@@ -227,8 +228,11 @@ class TSPBaseLine:
         2. 对于每个运动基元，估计应用该基元后的 unc
         '''
         if not self.kEnableExploartion:
+            return random.choice([
+                self.motion_primitive.num_primitive // 2,
+                self.motion_primitive.num_primitive - 1
+            ])  # 随机选取返回一个最大偏差值
             return self.motion_primitive.num_primitive - 1  # 返回最大偏差
-            # return np.random.randint(self.motion_primitive.num_primitive)
         try:
             curr_neg_unc_list, curr_neg_unc = gp_wrapper.eval_unc_with_grid(
                 std_at_grid=self.std_at_grid)  # 返回一个 list

@@ -299,13 +299,14 @@ class GaussianProcessWrapper:
                 for other in self.other_list
             ]
         else:
-            self.GPs = [
-                GaussianProcess(
-                    adaptive_kernel=False,
-                    id=self.id,
-                    other_id=other,
-                ) for other in self.other_list
-            ]
+            pass
+            # self.GPs = [
+            #     GaussianProcess(
+            #         adaptive_kernel=False,
+            #         id=self.id,
+            #         other_id=other,
+            #     ) for other in self.other_list
+            # ]
         self.curr_t = None  # self.curr_t 用来记录上一次调用 self.update_grids 的时刻
         self.kTargetExistBeliefThreshold = 0.4
         self.kHighInfoIdxThreshold = math.exp(-0.5)
@@ -339,6 +340,36 @@ class GaussianProcessWrapper:
     def update_GPs(self):
         for _, GP in enumerate(self.GPs):
             GP.update_gp()
+
+    ## this function for IPP problem
+    def get_observed_points(self, kTargetExistBeliefThreshold=None, time=None):
+        '''
+        返回当前高斯过程中，置信度最大的点，作为 decision 或其他环节输入
+        ---
+        如果输入时间，则是对未来或当下的估计
+        '''
+        if kTargetExistBeliefThreshold is None:
+            kTargetExistBeliefThreshold = self.kTargetExistBeliefThreshold
+        observed_points = []
+        grid_size = self.GPs[0].grid_size
+        for index, gp in enumerate(self.GPs):
+            if time is None:
+                y_pred_grid = gp.cache.get("y_pred_at_grid", None)
+            else:
+                y_pred_grid, _ = gp.predict_grid(time)
+            if y_pred_grid is None:
+                raise ValueError
+
+            y_pred_grid = y_pred_grid.reshape(grid_size, grid_size)
+            max_row, max_col = np.unravel_index(y_pred_grid.argmax(),
+                                                y_pred_grid.shape)
+            # 原点为 self.grid_size / 2, from row,col to [x,y]
+            point_vector = np.array([
+                max_row - grid_size / 2, max_col - grid_size / 2
+            ]) / (grid_size / 2)
+            if np.max(y_pred_grid) > kTargetExistBeliefThreshold:
+                observed_points.append(point_vector)
+        return observed_points
 
     def update_node_feature(self, time, node_coords):
         '''
