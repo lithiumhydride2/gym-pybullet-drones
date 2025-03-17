@@ -126,6 +126,21 @@ def circle_angle_diff(p1: np.ndarray, p2: np.ndarray):
     return np.abs(np.arctan2(abs(delta_sin), delta_cos))
 
 
+def eval_JS(y_true_all, y_pred_all, norm=True):
+    P = np.array(y_true_all) + 1e-8
+    Q = np.array(y_pred_all).reshape(-1) + 1e-8
+    if norm:
+        P /= np.sum(P, axis=0, keepdims=True)
+        Q /= np.sum(Q, axis=0, keepdims=True)
+    M = 0.5 * (P + Q)
+    vec_PM = P * np.log(P / M)
+    vec_QM = Q * np.log(Q / M)
+    KL_PM = np.sum(vec_PM, axis=0)
+    KL_QM = np.sum(vec_QM, axis=0)
+    JS = 0.5 * (KL_PM + KL_QM)
+    return JS
+
+
 def add_t(X, t: float):
     return np.concatenate((X, np.zeros((X.shape[0], 1)) + t), axis=1)
 

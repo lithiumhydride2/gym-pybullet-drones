@@ -46,13 +46,17 @@ def main():
                       fov_config=DEFAULT_FOV_CONFIG,
                       obs=DEFAULT_OBS_TYPE,
                       act=DEFAULT_ACT_TYPE,
-                      random_point=False)
+                      random_point=DEFAULT_RANDOM_POINT,
+                      waypoint_name=IPPArg.WAYPOINT_FILE_NAME)
     test_env = FlockingAviaryIPPmarl(**env_kwargs)
     # test_env = pettingzoo_to_sb3(test_env)
-
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/tsp_results"
+    logger = Logger(logging_freq_hz=DEFAULT_DECISION_FREQ,
+                    num_drones=DEFAULT_NUM_DRONE,
+                    output_folder=filename + '/test/')
     obs = test_env.reset()
     start = time.time()
-    TEST_DURATION = 100
+    TEST_DURATION = 10
 
     def tsp_step(obs):
         '''
@@ -78,22 +82,32 @@ def main():
 
         for j in range(IPPArg.NUM_DRONE):
             pass
-            # logger.log(drone=j,
-            #            timestamp=i / IPPArg.DECISION_FREQ,
-            #            state=test_env.drone_states[j],
-            #            control=np.hstack(
-            #                [test_env.target_vs[j, :3],
-            #                 np.zeros(9)]))
+            test_env.cache['unc']
+            logger.log(
+                drone=j,
+                timestamp=i / IPPArg.DECISION_FREQ,
+                state=test_env.drone_states[j],
+                control=np.hstack([test_env.target_vs[j, :3],
+                                   np.zeros(9)]),
+                metric=np.asarray([
+                    test_env.cache['UNC_metric'][j], test_env.cache['JSD'][j]
+                ]))
         test_env.render()
-        # if terminated.any():
-        #     obs, info = test_env.reset()
+
+        if info[0].get("finish_point", False):
+            print("Finish point")
+            ## 更新 flocking metric
+            break
+
         if IPPArg.DEFAULT_GUI:
             sync(i, start, 1 / IPPArg.DECISION_FREQ)
 
     test_env.close()
     #### plot
+    logger.flocking_metircs = test_env.flocking_metrics.metric
     logger.plot()
     logger.plot_traj()
+    logger.save_metric()
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from pettingzoo.utils.env import ParallelEnv
 from .IPPArguments import IPPArg
 from ..utils.graph_controller import GraphController
 from ..utils.utils import circle_angle_diff
+from ..utils.flocking_metrics import FlockingMetrics
 from gymnasium.spaces import Box, Dict, Discrete
 
 
@@ -74,6 +75,8 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                 num_drone=self.NUM_DRONES,
                 planner=None,
                 node_coords=self.IPPEnvs[nth].node_coords)
+        # flocking metric
+        self.flocking_metrics = FlockingMetrics(num_uav=self.NUM_DRONES)
 
     def plot_online(self):
         super().plot_online()
@@ -153,7 +156,28 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                 self.agents = []  # for petting zoo， 需要将 agents 置空
                 break
 
+        if self.reynolds.curr_waypoint_index == len(
+                self.reynolds.waypoints) - 1:
+            infos[0]["finish_point"] = True
+
+        # UNC in self.cache["UNC"]， 集群评价指标
+        self.flocing_metric_step()
+        self.cache["JSD"] = [0] * self.NUM_DRONES
+        for agent in self.control_by_RL_ID:
+            self.cache["JSD"][agent] = self.decisions[agent].compute_JSD()
         return observations, rewards, terminateds, truncateds, infos
+
+    def flocing_metric_step(self):
+        sense_graphs = []
+        relative_position = self._relative_position
+        adj_mat = self.cache["Adj_mat"]
+        for index in self.control_by_RL_ID:
+            sense_graphs.append(
+                self.decisions[index].GP_detection.get_observe_map())
+
+        self.flocking_metrics.step(
+            sense_graphs=sense_graphs,
+            ground_truth_pose=relative_position[0].reshape(-1, 2))
 
     def reset(self, seed=None, options=None):
         '''

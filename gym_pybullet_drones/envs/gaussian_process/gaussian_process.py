@@ -341,6 +341,16 @@ class GaussianProcessWrapper:
         for _, GP in enumerate(self.GPs):
             GP.update_gp()
 
+    def get_observe_map(self):
+
+        map = {key: 0 for key in range(self.num_uav)}
+        for gp in self.GPs:
+            y_pred = gp.cache.get("y_pred_at_grid", None)
+            if np.max(y_pred) >= 0.6:
+                map[gp.other_id] = 1
+        map.pop(self.id)
+        return map
+
     ## this function for IPP problem
     def get_observed_points(self, kTargetExistBeliefThreshold=None, time=None):
         '''

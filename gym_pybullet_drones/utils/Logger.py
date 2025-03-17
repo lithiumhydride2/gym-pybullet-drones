@@ -3,6 +3,7 @@ from datetime import datetime
 import time
 from cycler import cycler
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import scienceplots
 import pkg_resources
@@ -53,6 +54,10 @@ class Logger(object):
         self.counters = np.zeros(num_drones)
         self.timestamps = np.zeros(
             (num_drones, duration_sec * self.LOGGING_FREQ_HZ))
+        ## add new log
+        self.metrics = np.zeros(
+            (num_drones, 2, duration_sec * self.LOGGING_FREQ_HZ))
+        self.flocking_metircs = None
         #### Note: this is the suggest information to log ##############################
         self.states = np.zeros(
             (num_drones, 16,
@@ -90,7 +95,13 @@ class Logger(object):
 
     ################################################################################
 
-    def log(self, drone: int, timestamp, state, control=np.zeros(12)):
+    def log(self,
+            drone: int,
+            timestamp,
+            state,
+            control=np.zeros(12),
+            metric=np.zeros(2),
+            flocking_metric=np.zeros(3)):
         """Logs entries for a single simulation step, of a single drone.
 
         Parameters
@@ -117,12 +128,16 @@ class Logger(object):
                 (self.states, np.zeros((self.NUM_DRONES, 16, 1))), axis=2)
             self.controls = np.concatenate(
                 (self.controls, np.zeros((self.NUM_DRONES, 12, 1))), axis=2)
+            self.metrics = np.concatenate(
+                (self.metrics, np.zeros(
+                    (self.NUM_DRONES, 2, 1))), axis=2)  # unc,JSD
         #### Advance a counter is the matrices have overgrown it ###
         elif not self.PREALLOCATED_ARRAYS and self.timestamps.shape[
                 1] > current_counter:
             current_counter = self.timestamps.shape[1] - 1
         #### Log the information and increase the counter ##########
         self.timestamps[drone, current_counter] = timestamp
+        self.metrics[drone, :, current_counter] = metric
         #### Re-order the kinematic obs (of most Aviaries) #########
         # TODO(logger 中的 state 定义与外界不同 )
         self.states[drone, :, current_counter] = np.hstack(
@@ -313,6 +328,35 @@ class Logger(object):
             ax.set_yticks([-np.pi, 0, np.pi], ["$-\pi$", "0", " $\pi$"])
         fig.savefig(fname=self.save_templete.format("yaw", dpi=600))
 
+    def save_metric(self):
+        self.metrics
+        self.flocking_metircs
+        ## metric
+        drones = [f"Drone{i}" for i in range(self.NUM_DRONES)]
+        metrics = ['UNC', 'JSD']
+        num_drone, num_metric, length = self.metrics.shape
+        data = self.metrics.transpose(2, 0, 1).reshape(length, -1)
+        columns = pd.MultiIndex.from_product([drones, metrics],
+                                             names=["Drone", "Metric"])
+        df = pd.DataFrame(data, columns=columns)
+        mean_stats = df.mean().unstack()
+        std_stats = df.std().unstack()
+
+        df.to_csv(path_or_buf=self.save_path + '/metric.csv')
+        mean_stats.to_csv(path_or_buf=self.save_path + '/metric_mean.csv')
+        std_stats.to_csv(path_or_buf=self.save_path + '/metric_std.csv')
+
+        ## flocking_metrics
+        flocking_metrics = ["connect", "union", "safety"]
+        flocking_data = np.asarray(
+            [val for val in self.flocking_metircs.values()]).transpose(1, 0)
+        flocking_df = pd.DataFrame(data=flocking_data,
+                                   columns=flocking_metrics)
+        flocking_df.mean().to_csv(path_or_buf=self.save_path +
+                                  "/flocking_mean.csv")
+        flocking_df.std().to_csv(path_or_buf=self.save_path +
+                                 "/flocking_std.csv")
+
     def plot_traj(self):
         '''
             plot traj 中包含了 所有的绘制内容
@@ -340,7 +384,7 @@ class Logger(object):
 
         pkg_path = pkg_resources.resource_filename('gym_pybullet_drones', '')
         time_str = time.strftime("%Y%m%d-%H%M")
-
+        self.save_path = os.path.join(pkg_path, self.OUTPUT_FOLDER, time_str)
         self.save_templete = os.path.join(pkg_path, self.OUTPUT_FOLDER,
                                           time_str, "{}" + f"_{time_str}.png")
         os.makedirs(os.path.dirname(self.save_templete))

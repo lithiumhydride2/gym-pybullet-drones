@@ -167,6 +167,15 @@ class UAVGaussian():
 
         return yaw_feature
 
+    def compute_JSD(self):
+        '''
+        计算 JSD 和 UNC
+        '''
+        all_pred = self.cache["all_pred"]
+        ground_truth = self.GP_ground_truth.fn().max(axis=1)  # 取 max 进行多图的合并
+        JSD = eval_JS(ground_truth, all_pred)
+        return JSD
+
     def get_yaw_feature_of_target(self, gp_preds, node_index):
         '''
         从 gp_preds 中获取关于 node_index 的图特征 
@@ -349,23 +358,6 @@ class UAVGaussian():
         history_pool_dt: torch.Tensor = self.avgpool(
             self.dt_history.permute(1, 0)).permute(1, 0)
         return history_pool_node_inputs.numpy(), history_pool_dt.numpy()
-
-    def DecisionStep(self, obs):
-        '''
-        Args:
-            obs: 从 gp_step 中得到的 obs, 为 heat_map 的形式
-        '''
-        action = np.zeros(3)
-        action = self.planner.step(self.GP_detection,
-                                   curr_t=self.curr_time,
-                                   ego_heading=self.ego_heading,
-                                   std_at_grid=obs)
-
-        # history
-        self.last_ego_heading = self.ego_heading
-        self.last_yaw_action = action[-1]
-
-        return self.last_yaw_action
 
 
 if __name__ == "__main__":

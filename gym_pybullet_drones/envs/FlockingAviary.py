@@ -434,7 +434,8 @@ class FlockingAviary(BaseRLAviary):
 
     def _computeAdjacencyMatFOV(self):
         '''
-        在考虑 fov 的情况下, 计算无人机间观测邻接矩阵
+        在考虑 fov 的情况下, 计算无人机间观测邻接矩阵,
+        如在无需 update 的情况下，返回上一次的结果
         '''
         # mat = np.ones((self.NUM_DRONES, self.NUM_DRONES))
         # np.fill_diagonal(mat, 0)
@@ -443,6 +444,7 @@ class FlockingAviary(BaseRLAviary):
             self._computeFovMaskOcclusion(nth_drone)
             for nth_drone in range(self.NUM_DRONES)
         ])
+        self.cache["Adj_mat"] = mat
         return mat
 
     ################################################################################
@@ -519,24 +521,6 @@ class FlockingAviary(BaseRLAviary):
 
         return mask
 
-    def computeYawActionTSP(self, obs):
-        '''
-        使用基本的 tsp base line 计算 yaw command
-        '''
-        # no action
-        # return self.target_yaw_circle
-        if self.step_counter % self.DECISION_PER_PYB == 0:
-            yaw_action = np.zeros((self.NUM_DRONES, ))
-            obs_index = 0
-            for nth in self.control_by_RL_ID:
-                yaw_action[nth] = self.decisions[nth].DecisionStep(
-                    obs[obs_index])
-                obs_index += 1
-            self.target_yaw = self.target_yaw + yaw_action
-            self.target_yaw_circle = yaw_to_circle(self.target_yaw)
-        # if not, return last decision
-        return self.target_yaw_circle
-
     def _computeDroneState(self):
         """
         此处的 obs 是针对于环境的 obs,计算 reynolds 是针对于 每个无人机个体的 obs
@@ -575,6 +559,7 @@ class FlockingAviary(BaseRLAviary):
         self.cache = {}
         self.cache['obs'] = None
         self.cache['unc'] = [1.0] * self.NUM_DRONES
+        self.cache["UNC_metric"] = [0.0] * self.NUM_DRONES
         ### 初始化 debug gui
         if self.USER_DEBUG:
             self._gp_debug_init(self.USER_DEBUG)
@@ -786,15 +771,17 @@ class FlockingAviary(BaseRLAviary):
                     nth].GP_ground_truth.get_high_info_indx(ground_truth)
                 ## Unc update reward, 最大值为1
                 # 加入 unc reward 的设计
-                _, unc_list = self.decisions[nth].GP_detection.eval_avg_unc(
-                    self.curr_time, high_info_idx, return_all=True)
+                UNC_metric, unc_list = self.decisions[
+                    nth].GP_detection.eval_avg_unc(self.curr_time,
+                                                   high_info_idx,
+                                                   return_all=True)
                 unc_list = np.asarray(unc_list)
                 unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
                 unc_update = self.cache['unc'][nth] - unc_list
                 reward = np.sum(
                     unc_update[unc_update > .0]) * 5e1  # unc reward 的缩放因子
                 self.cache['unc'][nth] = unc_list
-
+                self.cache["UNC_metric"][nth] = UNC_metric
                 ## Unc reward 都是累计 reward, 需要即使奖励
                 preds = self.decisions[nth].cache["preds"]
                 observed_target = 0
