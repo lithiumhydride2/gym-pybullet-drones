@@ -95,7 +95,7 @@ def learn(drone=DEFAULT_DRONE,
     INIT_XYZS = np.array([[x * 2.8, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(num_drones)])  # 横一字排列
     INIT_RPYS = np.array([[0, 0, 0] for x in range(num_drones)])  # 偏航角初始化为 0
-
+    INIT_RPYS[-1][-1] = np.pi
     env_kwargs = dict(drone_model=drone,
                       num_drones=num_drones,
                       control_by_RL_mask=control_by_RL_mask,

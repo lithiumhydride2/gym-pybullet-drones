@@ -200,8 +200,8 @@ class FlockingAviary(BaseRLAviary):
         self.cache['unc'] = [1.0] * self.NUM_DRONES
 
         ### hyper param
-        self.VISABLE_DEGREE_THERSHOLD = 30  # in degree, compute from arctan2(0.3,2)
-        self.VISABLE_FAIL_DETECT = 0.3  # 10% 的概率无法检出目标
+        self.VISABLE_DEGREE_THERSHOLD = 15  # in degree, compute from arctan2(0.3,2)
+        self.VISABLE_FAIL_DETECT = 0.1  # 10% 的概率无法检出目标
 
     ################################################################################
     def _gp_debug_init(self, user_debug_gui):
@@ -364,13 +364,6 @@ class FlockingAviary(BaseRLAviary):
                     self.reynolds.command(
                         relative_position[i][adjacencyMat[i].astype(bool)]))
 
-                # 这里控制普通无人机也要依照自主感知来进行飞行方向决策
-                # reynolds_commands.append(
-                #     self.reynolds.command(
-                #         relative_position[i][super_power_adj_mat[i].astype(
-                #             bool)], relative_velocities[i][
-                #                 super_power_adj_mat[i].astype(bool)]))
-
         reynolds_commands = np.array(reynolds_commands)
 
         if self.cache.get("reynolds_command", None) is None:
@@ -384,7 +377,6 @@ class FlockingAviary(BaseRLAviary):
         # 添加z轴，将z轴reynolds_command 设置为0
         reynolds_commands = np.hstack(
             (reynolds_commands, np.zeros((self.NUM_DRONES, 1))))
-        assert reynolds_commands.shape == (self.NUM_DRONES, 3)
         return reynolds_commands
 
     def _get_command_migration(self, migration_mask=None):
@@ -594,50 +586,7 @@ class FlockingAviary(BaseRLAviary):
             commanded to the 4 motors of each drone.
 
         """
-        # note: 对于 IPP 此处的修改没有作用
-        if self.step_counter % self.FLOCKING_PER_PYB == 0:
-            #### 更新 flocking 控制指令
-            # migration mask 为 control mask 取反
-            # migration 为true, 则屏蔽掉该条 migration 指令
-            flocking_command = self._get_command_migration(
-                migration_mask=None)  #+ self._get_command_reynolds()
-            command_norm = np.linalg.norm(flocking_command,
-                                          axis=1,
-                                          keepdims=True)
-            command_norm_safe = np.where(command_norm < 1e-10, 1, command_norm)
-            flocking_command = flocking_command / command_norm_safe
-            # 避免除0
-            self.target_vs = np.hstack(
-                (flocking_command,
-                 np.min((np.ones(
-                     command_norm.shape), command_norm / self.SPEED_LIMIT),
-                        axis=0)))  # 将最大速度限制在 speed_limit
-
-        if self.ACT_TYPE == ActionType.YAW:
-            # 将对于 control_by_RL_mask 决策的 action 嵌入 action_all
-            target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
-                                          dtype=np.float32)
-            target_yaws_circle[self.control_by_RL_mask] = action
-
-        elif self.ACT_TYPE == ActionType.YAW_RATE or self.ACT_TYPE == ActionType.YAW_RATE_DISCRETE:
-            target_yaws_circle = np.zeros((self.NUM_DRONES, 2),
-                                          dtype=np.float32)
-            target_yaw_rates = np.zeros((self.NUM_DRONES, ), dtype=np.float32)
-            for index in self.control_by_RL_ID:
-                # 从 [0,10] 映射到 [-5,5]
-                coeff = float(action.squeeze(
-                ) - int(self.NUM_DISCRETE_ACTION / 2)) / int(
-                    self.NUM_DISCRETE_ACTION / 2
-                ) if self.ACT_TYPE == ActionType.YAW_RATE_DISCRETE else action.squeeze(
-                )
-                target_yaw_rates[index] = coeff * self.MAX_YAW_RATE
-            # return in target rate mode
-            return self._computeRpmFromCommand(
-                self.target_vs, target_yaw_rates=target_yaw_rates)
-
-        target_yaws = circle_to_yaw(target_yaws_circle)
-        return self._computeRpmFromCommand(self.target_vs,
-                                           target_yaws=target_yaws)
+        raise NotImplementedError
 
     def _computeRpmFromCommand(self,
                                target_vs,
@@ -778,20 +727,26 @@ class FlockingAviary(BaseRLAviary):
                 unc_list = np.asarray(unc_list)
                 unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
                 unc_update = self.cache['unc'][nth] - unc_list
-                reward = np.sum(
-                    unc_update[unc_update > .0]) * 5e1  # unc reward 的缩放因子
+                reward = np.sum(unc_update[unc_update > .0]
+                                ) * 1e1  # unc reward 的缩放因子, unc reward 过于稀疏了
                 self.cache['unc'][nth] = unc_list
                 self.cache["UNC_metric"][nth] = UNC_metric
+
                 ## Unc reward 都是累计 reward, 需要即使奖励
                 preds = self.decisions[nth].cache["preds"]
                 observed_target = 0
-
                 for pred in preds:
                     if np.max(pred) > IPPArg.EXIST_THRESHOLD:
                         observed_target += 1
-                reward += observed_target
+                reward_obs = observed_target / (self.NUM_DRONES - 1)
                 # 以潜在目标数量进行归一化
-                reward = reward / (self.NUM_DRONES - 1) if reward > 0 else 0.
+                reward += reward_obs
+
+                ## 加入关于速度的reward
+                reynolds = self.cache["reynolds_command"]
+                speed = np.linalg.norm(reynolds, axis=1)
+                reynolds_reward = speed.var() / (speed.mean() + 1e-6)
+                reward += (1 - reynolds_reward)
                 return reward
 
             reward = np.zeros((self.NUM_DRONES, ))

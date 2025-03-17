@@ -201,7 +201,8 @@ class UAVGaussian():
                                                     (grid_size, grid_size))
                 yaw = np.asarray(
                     [max_row - grid_size / 2, max_col - grid_size / 2])
-                yaw_feature_of_target[target_id] = yaw / np.linalg.norm(yaw)
+                yaw_feature_of_target[target_id] = yaw / (np.linalg.norm(yaw) +
+                                                          1e-6)
                 belief_feature[target_id] = np.max(
                     gp_pred[self.fov_masks[node_index].astype(
                         bool)]) if node_index is not None else np.max(gp_pred)
