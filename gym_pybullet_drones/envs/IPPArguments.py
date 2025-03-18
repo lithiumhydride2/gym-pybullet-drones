@@ -21,7 +21,7 @@ class IPPArguments:
             self.DEFAULT_GUI = False
             self.DEFAULT_USER_DEBUG_GUI = False
             self.VEC_ENV_CLS = DummyVecEnv
-        self.NUM_DRONE = 6
+        self.NUM_DRONE = 5
         self.CONTROL_BY_RL_MASK = "all"  # "random" 为随机生成,其余为固定, "all" 为所有无人机受 RL 控制
         ##
         migration_mask = np.ones((self.NUM_DRONE, )).astype(bool)

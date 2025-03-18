@@ -92,7 +92,7 @@ class Reynolds():
         num_drones = positions.shape[0]
         migration_command = np.array([
             (self.curr_waypoint - positions[i]) /
-            np.linalg.norm(self.curr_waypoint - positions[i])
+            (np.linalg.norm(self.curr_waypoint - positions[i]) + 1e-6)
             for i in range(num_drones)
         ])
         return migration_command * self.migration_gain

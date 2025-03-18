@@ -372,11 +372,11 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
         转换为 petting zoo 的形式
         '''
         reward: np.ndarray = super()._computeReward()
-        # for nth in self.control_by_RL_ID:
-        #     smooth_reward = circle_angle_diff(
-        #         self.IPPEnvs[nth].route_coord[-1],
-        #         self.IPPEnvs[nth].route_coord[-2]) * 1e-1
-        #     reward[nth] += smooth_reward
+        for nth in self.control_by_RL_ID:
+            smooth_reward = circle_angle_diff(
+                self.IPPEnvs[nth].route_coord[-1],
+                self.IPPEnvs[nth].route_coord[-2]) * 1e0
+            reward[nth] += smooth_reward
 
         # 在 marl 的情况下， reward 为所有无人机 reward 的平均值
         if self.control_by_RL_mask.sum() == self.NUM_DRONES:
@@ -385,7 +385,7 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
                 reward_dict[agent] = reward[agent]
             return reward_dict
         else:
-            return float(reward)
+            return float(reward.mean())
 
     def _preprocessAction(self, action):
         """

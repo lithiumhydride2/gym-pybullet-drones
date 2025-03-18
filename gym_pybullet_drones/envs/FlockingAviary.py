@@ -713,6 +713,7 @@ class FlockingAviary(BaseRLAviary):
                 ObservationType.GAUSSIAN, ObservationType.IPP,
                 ObservationType.SIMPLE
         ]:
+            relative_position = self._relative_position
 
             def compute_reward(nth):
                 ground_truth = self.decisions[nth].GP_ground_truth.fn()
@@ -742,11 +743,13 @@ class FlockingAviary(BaseRLAviary):
                 # 以潜在目标数量进行归一化
                 reward += reward_obs
 
-                ## 加入关于速度的reward
-                reynolds = self.cache["reynolds_command"]
-                speed = np.linalg.norm(reynolds, axis=1)
-                reynolds_reward = speed.var() / (speed.mean() + 1e-6)
-                reward += (1 - reynolds_reward)
+                ## 加入关于距离的reward
+                other_mask = np.ones((self.NUM_DRONES)).astype(bool)
+                other_mask[nth] = False
+                relative_distance = np.linalg.norm(relative_position[nth],
+                                                   axis=1)[other_mask]
+                if np.min(relative_distance) > 1.5:
+                    reward += 1
                 return reward
 
             reward = np.zeros((self.NUM_DRONES, ))
