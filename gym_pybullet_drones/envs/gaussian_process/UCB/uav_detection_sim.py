@@ -43,8 +43,6 @@ class UavDetectionSim:
                 self.ego_heading -= primitive[-1][-1]
                 return primitive_reward
         self.ego_heading -= primitive[-1][-1]
-
-        # 仅评估轨迹最后一条
         for id, action in enumerate(primitive[-1:]):
             heading_action = action[-1]
             self.__take_action(heading_action, time_span)

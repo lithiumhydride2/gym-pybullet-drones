@@ -729,7 +729,7 @@ class FlockingAviary(BaseRLAviary):
                 unc_list[np.isnan(unc_list)] = 1.0  # nan值设置为1
                 unc_update = self.cache['unc'][nth] - unc_list
                 reward = np.sum(unc_update[unc_update > .0]
-                                ) * 1e1  # unc reward 的缩放因子, unc reward 过于稀疏了
+                                ) * 1e2  # unc reward 的缩放因子, unc reward 过于稀疏了
                 self.cache['unc'][nth] = unc_list
                 self.cache["UNC_metric"][nth] = UNC_metric
 
@@ -744,12 +744,7 @@ class FlockingAviary(BaseRLAviary):
                 reward += reward_obs
 
                 ## 加入关于距离的reward
-                other_mask = np.ones((self.NUM_DRONES)).astype(bool)
-                other_mask[nth] = False
-                relative_distance = np.linalg.norm(relative_position[nth],
-                                                   axis=1)[other_mask]
-                if np.min(relative_distance) > 1.5:
-                    reward += 1
+
                 return reward
 
             reward = np.zeros((self.NUM_DRONES, ))

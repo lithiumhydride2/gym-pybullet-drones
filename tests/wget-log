@@ -1,0 +1,35 @@
+--2025-03-20 17:01:16--  http://wget/
+正在解析主机 wget (wget)... 失败：域名解析暂时失败。
+wget: 无法解析主机地址 “wget”
+--2025-03-20 17:01:16--  https://github.com/timduly4/pyglow/raw/master/static/hwm93.f
+正在解析主机 github.com (github.com)... 20.205.243.166
+正在连接 github.com (github.com)|20.205.243.166|:443... 已连接。
+已发出 HTTP 请求，正在等待回应... 302 Found
+位置：https://raw.githubusercontent.com/timduly4/pyglow/master/static/hwm93.f [跟随至新的 URL]
+--2025-03-20 17:01:17--  https://raw.githubusercontent.com/timduly4/pyglow/master/static/hwm93.f
+正在解析主机 raw.githubusercontent.com (raw.githubusercontent.com)... 185.199.109.133, 185.199.108.133, 185.199.111.133, ...
+正在连接 raw.githubusercontent.com (raw.githubusercontent.com)|185.199.109.133|:443... 已连接。
+已发出 HTTP 请求，正在等待回应... 200 OK
+长度： 136487 (133K) [text/plain]
+正在保存至: “hwm93.f.1”
+
+     0K .......... .......... .......... .......... .......... 37%  234M 0s
+    50K .......... .......... .........                        59%  682M=0s
+
+2025-03-20 23:37:09 (309 MB/s) - 在 80996/136487 字节处发生读取错误 (成功)。 重试中。
+
+--2025-03-20 23:37:10--  (尝试次数： 2)  https://raw.githubusercontent.com/timduly4/pyglow/master/static/hwm93.f
+正在连接 raw.githubusercontent.com (raw.githubusercontent.com)|185.199.109.133|:443... 已连接。
+已发出 HTTP 请求，正在等待回应... 206 Partial Content
+长度： 136487 (133K)，剩余 55491 (54K) [text/plain]
+正在保存至: “hwm93.f.1”
+
+        [ 跳过 50K ]
+    50K ,,,,,,,,,, ,,,,,,,,,, ,,,,,,,,,. .......... .......... 75%  196K 0s
+   100K .......... .......... .......... ...                  100%  140K=0.5s
+
+2025-03-20 23:44:41 (110 KB/s) - 已保存 “hwm93.f.1” [136487/136487])
+
+下载完毕 --2025-03-20 23:44:41--
+总用时：6h 43m 25s
+下载了：1 个文件，0.5s (110 KB/s) 中的 54K

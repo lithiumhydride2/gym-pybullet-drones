@@ -21,7 +21,7 @@ class IPPArguments:
             self.DEFAULT_GUI = False
             self.DEFAULT_USER_DEBUG_GUI = False
             self.VEC_ENV_CLS = DummyVecEnv
-        self.NUM_DRONE = 5
+        self.NUM_DRONE = 4
         self.CONTROL_BY_RL_MASK = "all"  # "random" 为随机生成,其余为固定, "all" 为所有无人机受 RL 控制
         ##
         migration_mask = np.ones((self.NUM_DRONE, )).astype(bool)
@@ -39,7 +39,7 @@ class IPPArguments:
         self.gen_range = np.deg2rad([0, 180])  # 限制采样的范围
         #### terminated
         self.MAX_EPISODE_LEN = 4000  # max length of an episode / s
-        self.TERMINATE_MIN_DIS = 0.8  # 1.0m, 修改为 0.6 以更简单地学习
+        self.TERMINATE_MIN_DIS = 0.6  # 1.0m, 修改为 0.6 以更简单地学习
         self.TERMINATE_MAX_DIS = 5.0
 
         # 选取前 32 大的特征值，这里抛去第一大特征值，因此最大为 sample_num - 1

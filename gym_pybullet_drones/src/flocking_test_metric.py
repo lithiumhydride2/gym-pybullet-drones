@@ -8,10 +8,14 @@ import time
 from gym_pybullet_drones.utils.Logger import Logger
 from flocking_ipp import *
 
+DEFAULT_DECISION_FREQ = 5
+
 
 def main():
     # 现在和 ROS 环境中同一个 model
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.17.2025_22.58.12"
+    # filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.06.2025_22.31.14"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.20.2025_10.16.32"
+    # filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.21.2025_11.41.45"
     model_path = filename + '/best_model.zip'
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(DEFAULT_NUM_DRONE)])  # 横一字排列
@@ -52,7 +56,7 @@ def main():
         return actions.astype(int)
 
     start = time.time()
-    TEST_DURATION = 100
+    TEST_DURATION = 200
 
     for i in range(TEST_DURATION * IPPArg.DECISION_FREQ):
 
@@ -87,6 +91,7 @@ def main():
     logger.plot()
     logger.plot_traj()
     logger.save_metric()
+    logger.save_to_pickle()
 
 
 if __name__ == "__main__":

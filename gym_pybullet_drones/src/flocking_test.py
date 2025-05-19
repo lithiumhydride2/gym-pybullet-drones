@@ -11,14 +11,14 @@ from flocking_ipp import *
 
 def main():
     # 现在和 ROS 环境中同一个 model
-    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.11.2025_21.31.43"
+    filename = "/home/lih/fromgit/gym-pybullet-drones/gym_pybullet_drones/src/results/save-03.06.2025_22.31.14"
     model_path = filename + '/best_model.zip'
     INIT_XYZS = np.array([[x * 2.5, .0, DEFAULT_FLIGHT_HEIGHT]
                           for x in range(DEFAULT_NUM_DRONE)])  # 横一字排列
 
     INIT_RPYS = np.array([[0, 0, 0]
                           for x in range(DEFAULT_NUM_DRONE)])  # 偏航角初始化为 0
-
+    INIT_RPYS[-1][-1] = np.pi
     env_kwargs = dict(drone_model=DEFAULT_DRONE,
                       num_drones=DEFAULT_NUM_DRONE,
                       control_by_RL_mask=DEFAULT_CONTROL_BY_RL_MASK,
@@ -34,7 +34,8 @@ def main():
                       fov_config=DEFAULT_FOV_CONFIG,
                       obs=DEFAULT_OBS_TYPE,
                       act=DEFAULT_ACT_TYPE,
-                      random_point=False)
+                      random_point=False,
+                      waypoint_name=IPPArg.WAYPOINT_FILE_NAME)
     test_env = FlockingAviaryIPPmarl(**env_kwargs)
     test_env = pettingzoo_to_sb3(test_env)
     model = PPO.load(model_path, test_env)
@@ -47,7 +48,7 @@ def main():
 
     for i in range(TEST_DURATION * IPPArg.DECISION_FREQ):
 
-        action, _states = model.predict(obs, deterministic=True)
+        action, _states = model.predict(obs, deterministic=False)
         print("Action is : {}".format(action))
         obs, reward, terminated, info = test_env.step(action)
 
@@ -60,8 +61,8 @@ def main():
             #                [test_env.target_vs[j, :3],
             #                 np.zeros(9)]))
         test_env.render()
-        if terminated.any():
-            obs, info = test_env.reset()
+        # if terminated.any():
+        #     obs = test_env.reset()
         if IPPArg.DEFAULT_GUI:
             sync(i, start, 1 / IPPArg.DECISION_FREQ)
 

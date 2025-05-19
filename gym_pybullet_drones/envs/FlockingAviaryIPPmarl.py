@@ -161,7 +161,7 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
             infos[0]["finish_point"] = True
 
         # UNC in self.cache["UNC"]， 集群评价指标
-        self.flocing_metric_step()
+        self.cache["flocking_metric"] = self.flocing_metric_step()
         self.cache["JSD"] = [0] * self.NUM_DRONES
         for agent in self.control_by_RL_ID:
             self.cache["JSD"][agent] = self.decisions[agent].compute_JSD()
@@ -175,7 +175,7 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
             sense_graphs.append(
                 self.decisions[index].GP_detection.get_observe_map())
 
-        self.flocking_metrics.step(
+        return self.flocking_metrics.step(
             sense_graphs=sense_graphs,
             ground_truth_pose=relative_position[0].reshape(-1, 2))
 
@@ -375,9 +375,11 @@ class FlockingAviaryIPPmarl(FlockingAviary, ParallelEnv):
         for nth in self.control_by_RL_ID:
             smooth_reward = circle_angle_diff(
                 self.IPPEnvs[nth].route_coord[-1],
-                self.IPPEnvs[nth].route_coord[-2]) * 1e0
+                self.IPPEnvs[nth].route_coord[-2]) * 1e1
             reward[nth] += smooth_reward
 
+        for nth in self.control_by_RL_ID:
+            reward[nth] += self.cache.get("flocking_metric", [0, 0, 0])[0]
         # 在 marl 的情况下， reward 为所有无人机 reward 的平均值
         if self.control_by_RL_mask.sum() == self.NUM_DRONES:
             reward_dict = {}

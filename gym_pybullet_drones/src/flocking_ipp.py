@@ -173,7 +173,7 @@ def learn(drone=DEFAULT_DRONE,
     model.learn(total_timesteps=int(3e6),
                 callback=callback,
                 log_interval=100,
-                progress_bar=True)  # TODO: 改为 True
+                progress_bar=True)
 
     model.save(filename + '/final_model.zip')
     print(filename)
@@ -261,6 +261,6 @@ if __name__ == "__main__":
                         metavar='',
                         help="If none, continue train from abs path")
     # 这里需要添加 args = [] 才能使用 vscode 进行 debug
-    ARGS = parser.parse_args(args=[])
+    ARGS = parser.parse_args()
 
     learn(**vars(ARGS))

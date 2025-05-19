@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scienceplots
 import pkg_resources
+import dill
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
@@ -146,6 +147,10 @@ class Logger(object):
         self.counters[drone] = current_counter + 1
 
     ################################################################################
+    def save_to_pickle(self):
+        filename = self.save_path + "/logger.pkl"
+        with open(filename, "wb") as file:
+            dill.dump(self, file)
 
     def save(self):
         """Save the logs to file.
@@ -309,7 +314,7 @@ class Logger(object):
         '''
         plt.close("all")
         self.__set_plot()
-        cmap = plt.get_cmap("Set1").colors
+        cmap = list(plt.get_cmap("Set1").colors) * 2
         fig, axes = plt.subplots(self.NUM_DRONES,
                                  1,
                                  figsize=(5, 1 * self.NUM_DRONES),
@@ -364,7 +369,7 @@ class Logger(object):
         ### 这里所有的数据都是以 npy 格式存储的， 若想要进行绘制， 应当对原有代码作适当转换
         plt.close("all")
         self.__set_plot()
-        cmap = plt.get_cmap("Set1").colors
+        cmap = list(plt.get_cmap("Set1").colors) * 2
         fig, ax = plt.subplots(figsize=[5, 5])
         poses = self.states[:, 0:3, :]  # x y z
         for index, pose in enumerate(poses):
@@ -422,13 +427,21 @@ class Logger(object):
         distance_std = np.std(distance, axis=0)
 
         t = self.get_time
+        ## 插值
+        # mask = distance_min < 1.2
+        # distance_min[mask] = np.interp(distance_min[mask],
+        #                                (distance_min[mask].min(), 1.2),
+        #                                (0.7, 1.2))
         # 这段复制
         fig, ax = plt.subplots(1, 1, figsize=(5, 2))
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Distance (m)")
-        plt.ylim([0, 3])
+        plt.ylim([0, 6])
         plt.xlim([0, self.timestamps.shape[1] / self.LOGGING_FREQ_HZ])
 
+        print("distance_main", np.mean(distance))
+
+        print("distance_std", np.std(distance))
         ax.plot(t, distance_main, label="Mean")
         ax.plot(t, distance_min, label="Min")
         ax.plot(t, distance_std, label="Std")
@@ -437,7 +450,10 @@ class Logger(object):
         plt.grid(True)
 
         ### 保存图片
-        fig.savefig(fname=self.save_templete.format("distance"), dpi=600)
+        try:
+            fig.savefig(fname=self.save_templete.format("distance"), dpi=600)
+        except:
+            return fig
 
     def __set_plot(self, grid=False):
         if grid:

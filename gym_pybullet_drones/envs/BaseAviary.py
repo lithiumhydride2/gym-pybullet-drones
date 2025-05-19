@@ -358,35 +358,18 @@ class BaseAviary(gym.Env):
                         frame_num=int(self.step_counter /
                                       self.IMG_CAPTURE_FREQ))
         #### Read the GUI's input parameters #######################
-        if self.GUI and self.USER_DEBUG:
-            current_input_switch = p.readUserDebugParameter(
-                self.INPUT_SWITCH, physicsClientId=self.CLIENT)
-            if current_input_switch > self.last_input_switch:
-                self.last_input_switch = current_input_switch
-                self.USE_GUI_RPM = True if self.USE_GUI_RPM == False else False
-        if self.USE_GUI_RPM:
-            for i in range(4):
-                self.gui_input[i] = p.readUserDebugParameter(
-                    int(self.SLIDERS[i]), physicsClientId=self.CLIENT)
-            clipped_action = np.tile(self.gui_input, (self.NUM_DRONES, 1))
-            if self.step_counter % (self.PYB_FREQ / 2) == 0:
-                self.GUI_INPUT_TEXT = [
-                    p.addUserDebugText("Using GUI RPM",
-                                       textPosition=[0, 0, 0],
-                                       textColorRGB=[1, 0, 0],
-                                       lifeTime=1,
-                                       textSize=2,
-                                       parentObjectUniqueId=self.DRONE_IDS[i],
-                                       parentLinkIndex=-1,
-                                       replaceItemUniqueId=int(
-                                           self.GUI_INPUT_TEXT[i]),
-                                       physicsClientId=self.CLIENT)
-                    for i in range(self.NUM_DRONES)
-                ]
+        if self.GUI:
+            # 调整视角
+            pass
+        pos = np.mean(self.pos, axis=0).reshape(3, )
+        p.resetDebugVisualizerCamera(cameraDistance=4,
+                                     cameraYaw=45,
+                                     cameraPitch=-80,
+                                     cameraTargetPosition=pos,
+                                     physicsClientId=self.CLIENT)
         #### Save, preprocess, and clip the action to the max. RPM #
-        else:
-            clipped_action = np.reshape(self._preprocessAction(action),
-                                        (self.NUM_DRONES, 4))
+        clipped_action = np.reshape(self._preprocessAction(action),
+                                    (self.NUM_DRONES, 4))
         #### Repeat for as many as the aggregate physics steps #####
         for _ in range(self.PYB_STEPS_PER_CTRL):
             #### Update and store the drones kinematic info for certain

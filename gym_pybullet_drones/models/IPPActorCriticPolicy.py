@@ -63,7 +63,7 @@ class IPPMlpExtractor(nn.Module):
     def forward(self, features):
         '''
         Args:
-            features: shape (batch_size, curr_edge + k_size, feature_dim
+            features: shape (batch_size, curr_edge + k_size, feature_dim)
         '''
         features = features.float()
         return self.forward_actor(features), self.forward_critic(features)

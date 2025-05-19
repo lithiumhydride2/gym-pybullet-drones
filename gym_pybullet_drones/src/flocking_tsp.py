@@ -6,12 +6,13 @@ from stable_baselines3.common.env_checker import check_env
 from gym_pybullet_drones.envs.FlockingAviaryIPPmarl import FlockingAviaryIPPmarl
 import time
 from gym_pybullet_drones.utils.Logger import Logger
-from gym_pybullet_drones.utils.utils import circle_to_yaw
+from gym_pybullet_drones.utils.utils import circle_to_yaw, normalize_radians
 from gym_pybullet_drones.envs.gaussian_process.UCB.tsp_base_line import TSPBaseLine
 from flocking_ipp import *
 
 ## 更改 DEFAULT_ACT_TYPE
 DEFAULT_ACT_TYPE = ActionType.YAW
+DEFAULT_DECISION_FREQ = 1
 
 
 def main():
@@ -56,26 +57,28 @@ def main():
                     output_folder=filename + '/tsp/')
     obs = test_env.reset()
     start = time.time()
-    TEST_DURATION = 100
+    TEST_DURATION = 200
+    action = np.zeros((DEFAULT_NUM_DRONE, ))
 
     def tsp_step(obs):
         '''
         实际不需要obs
         '''
         # planner 返回三维向量
-        action = np.zeros((DEFAULT_NUM_DRONE, ))
+        action_diff = np.zeros((DEFAULT_NUM_DRONE, ))
         for i in range(DEFAULT_NUM_DRONE):
-            action[i] = planners[i].step(
+            action_diff[i] = planners[i].step(
                 gp_wrapper=test_env.decisions[i].GP_detection,
                 curr_t=test_env.curr_time,
                 ego_heading=circle_to_yaw(
                     test_env._computeHeading(i)[:2].reshape(1, 2)),
                 std_at_grid=None)[-1]
-        return action
+        return action_diff
 
     for i in range(TEST_DURATION * IPPArg.DECISION_FREQ):
 
-        action = tsp_step(obs)
+        action += tsp_step(obs)
+        action = [normalize_radians(act) for act in action]
         print("Action is : {}".format(action))
         # action in shape (num_drone,)
         obs, reward, terminated, truncateds, info = test_env.step(action)
@@ -106,6 +109,7 @@ def main():
     logger.plot()
     logger.plot_traj()
     logger.save_metric()
+    logger.save_to_pickle()
 
 
 if __name__ == "__main__":
